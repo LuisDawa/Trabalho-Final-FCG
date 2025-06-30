@@ -147,6 +147,8 @@ struct SceneObject
     glm::vec3    bbox_max;
 };
 
+bool preview_construction = false;
+
 // Abaixo definimos variáveis globais utilizadas em várias funções do código.
 
 // A cena virtual é uma lista de objetos nomeados, guardados em um dicionário
@@ -278,7 +280,8 @@ int main(int argc, char* argv[])
 
     LoadShadersFromFiles();    
     LoadTextureImage("../../data/sky.jpg");         
-    LoadTextureImage("../../data/floor.jpg");         
+    LoadTextureImage("../../data/floor.jpg");   
+    LoadTextureImage("../../data/sky2.jpg");           
     
     ObjModel skyboxmodel("../../data/skybox.obj");
     ComputeNormals(&skyboxmodel);
@@ -287,6 +290,10 @@ int main(int argc, char* argv[])
     ObjModel planemodel("../../data/plane.obj");
     ComputeNormals(&planemodel);
     BuildTrianglesAndAddToVirtualScene(&planemodel);
+
+    ObjModel cubemodel("../../data/cube.obj");
+    ComputeNormals(&cubemodel);
+    BuildTrianglesAndAddToVirtualScene(&cubemodel);
     
 
     if ( argc > 1 )
@@ -334,6 +341,8 @@ int main(int argc, char* argv[])
             g_CameraUp
         );
 
+        glm::mat4 view_no_translation = glm::mat4(glm::mat3(view));
+
         // Agora computamos a matriz de Projeção.
         glm::mat4 projection;
 
@@ -365,26 +374,45 @@ int main(int argc, char* argv[])
 
         glm::mat4 model = Matrix_Identity(); // Transformação identidade de modelagem
 
+        // Define as constantes de cada textura. Devem ser as mesmas do arquivo shader_fragment.glsl
+        #define SKY 0
+        #define ROCKS  1        
+
         // Enviamos as matrizes "view" e "projection" para a placa de vídeo
         // (GPU). Veja o arquivo "shader_vertex.glsl", onde estas são
         // efetivamente aplicadas em todos os pontos.
-        glUniformMatrix4fv(g_view_uniform       , 1 , GL_FALSE , glm::value_ptr(view));
         glUniformMatrix4fv(g_projection_uniform , 1 , GL_FALSE , glm::value_ptr(projection));
-
-        #define SKYBOX 0
-        #define PLANE  1
-
+        
+        // View que acompanha o movimento da câmera 
+        glUniformMatrix4fv(g_view_uniform, 1, GL_FALSE, glm::value_ptr(view_no_translation));
+        
         // Desenhamos a skybox do céu        
         model = Matrix_Scale(-8.0f, 8.0f, 8.0f) * Matrix_Translate(0.0f,0.0f,0.0f);        
         glUniformMatrix4fv(g_model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
-        glUniform1i(g_object_id_uniform, SKYBOX);
+        glUniform1i(g_object_id_uniform, SKY);
         DrawVirtualObject("skybox_globe");                
+        
+        if(preview_construction){
+            // Desenhamos o objeto de preview da criação
+            float distance_to_camera = 2.0f;
+            glm::vec3 cubePos = g_CameraPosition + glm::normalize(g_CameraFront) * distance_to_camera;        
+            glm::mat3 rotation_only =  glm::mat3(view);
+            glm::mat3 inverse_rotation = glm::transpose(rotation_only);
+            model = Matrix_Scale( 0.2f, 0.2f, 0.2f) * Matrix_Translate(cubePos.x,cubePos.y,cubePos.z) * glm::mat4(inverse_rotation) ;       
+            glUniformMatrix4fv(g_model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
+            glUniform1i(g_object_id_uniform, ROCKS);
+            DrawVirtualObject("cube");
+        }
+
+        // View que não acompanha o movimento da câmera
+        glUniformMatrix4fv(g_view_uniform, 1 , GL_FALSE , glm::value_ptr(view));
 
         // Desenhamos o plano do chão
         model = Matrix_Translate(0.0f,-1.2f, 0.0f);
         glUniformMatrix4fv(g_model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
-        glUniform1i(g_object_id_uniform, PLANE);
+        glUniform1i(g_object_id_uniform, ROCKS);
         DrawVirtualObject("floor");
+        
 
         // Imprimimos na tela informação sobre o número de quadros renderizados
         // por segundo (frames per second).
@@ -549,6 +577,7 @@ void LoadShadersFromFiles()
     glUseProgram(g_GpuProgramID);
     glUniform1i(glGetUniformLocation(g_GpuProgramID, "SkyboxTexture"), 0);
     glUniform1i(glGetUniformLocation(g_GpuProgramID, "FloorTexture"), 1);
+    glUniform1i(glGetUniformLocation(g_GpuProgramID, "CubeTexture"), 2);
     glUseProgram(0);
 }
 
@@ -957,7 +986,14 @@ double g_LastCursorPosX, g_LastCursorPosY;
 // Função callback chamada sempre que o usuário aperta algum dos botões do mouse
 void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
 {
-
+    if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_PRESS)
+    {
+        preview_construction = true; 
+    }
+    if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_RELEASE)
+    {
+        preview_construction = false;        
+    }
 }
 
 // Função callback chamada sempre que o usuário movimentar o cursor do mouse em

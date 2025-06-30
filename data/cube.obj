@@ -1,0 +1,42 @@
+g cube
+
+# Vértices
+v -0.5 -0.5 -0.5
+v  0.5 -0.5 -0.5
+v  0.5  0.5 -0.5
+v -0.5  0.5 -0.5
+v -0.5 -0.5  0.5
+v  0.5 -0.5  0.5
+v  0.5  0.5  0.5
+v -0.5  0.5  0.5
+
+# Coordenadas de textura
+vt 0 0
+vt 1 0
+vt 1 1
+vt 0 1
+
+# Faces (2 triângulos por face, usando as mesmas 4 coordenadas UV em cada)
+# Face traseira
+f 1/1 2/2 3/3
+f 1/1 3/3 4/4
+
+# Face frontal
+f 5/1 6/2 7/3
+f 5/1 7/3 8/4
+
+# Face esquerda
+f 1/1 5/2 8/3
+f 1/1 8/3 4/4
+
+# Face direita
+f 2/1 6/2 7/3
+f 2/1 7/3 3/4
+
+# Face superior
+f 4/1 3/2 7/3
+f 4/1 7/3 8/4
+
+# Face inferior
+f 1/1 2/2 6/3
+f 1/1 6/3 5/4

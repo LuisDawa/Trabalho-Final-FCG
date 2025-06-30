@@ -19,8 +19,8 @@ uniform mat4 view;
 uniform mat4 projection;
 
 // Identificador que define qual objeto está sendo desenhado no momento
-#define SKYBOX  0
-#define PLANE  1
+#define SKY  0
+#define ROCKS  1
 uniform int object_id;
 
 // Parâmetros da axis-aligned bounding box (AABB) do modelo
@@ -53,14 +53,14 @@ void main()
     vec3 Kd0 = vec3(0.0);
     
 
-    if ( object_id == PLANE )
+    if ( object_id == ROCKS )
     {
         U = texcoords.x;
         V = texcoords.y;           
 
         Kd0 = texture(FloorTexture, vec2(U,V)).rgb;    
     }
-    else if( object_id == SKYBOX )
+    else if( object_id == SKY )
     {
         vec4 bbox_center = (bbox_min + bbox_max) / 2.0;
 
@@ -72,7 +72,7 @@ void main()
         color.rgb = texture(SkyboxTexture, vec2(U,V)).rgb;                                    
     }
         
-    if( object_id != SKYBOX ){  // Objetos que devem ter sobreamento
+    if( object_id != SKY ){  // Objetos que devem ter sobreamento
         float lambert = max(0,dot(n,l));
         color.rgb = Kd0 * (lambert + 0.01);
     }
