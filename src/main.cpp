@@ -12,6 +12,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <algorithm>
+#include <optional>
 
 // Headers das bibliotecas OpenGL
 #include <glad/glad.h>   // Criação de contexto OpenGL 3.3
@@ -108,6 +109,7 @@ GLuint CreateGpuProgram(GLuint vertex_shader_id, GLuint fragment_shader_id); // 
 void PrintObjModelInfo(ObjModel*); // Função para debugging
 GLuint LoadCubemap(std::vector<std::string> faces);
 
+
 // Declaração de funções auxiliares para renderizar texto dentro da janela
 // OpenGL. Estas funções estão definidas no arquivo "textrendering.cpp".
 void TextRendering_Init();
@@ -147,7 +149,12 @@ struct SceneObject
     glm::vec3    bbox_max;
 };
 
-bool preview_construction = false;
+struct PlacedObject
+{
+    std::string objectName;
+    glm::mat4   modelMatrix;
+};
+
 
 // Abaixo definimos variáveis globais utilizadas em várias funções do código.
 
@@ -156,6 +163,12 @@ bool preview_construction = false;
 // objetos dentro da variável g_VirtualScene, e veja na função main() como
 // estes são acessados.
 std::map<std::string, SceneObject> g_VirtualScene;
+
+// Vetor para guardar todos os objetos permanentes na cena
+std::vector<PlacedObject> g_PlacedObjects;
+
+// Um "container" que pode ou não ter um objeto de preview dentro dele
+std::optional<PlacedObject> g_PreviewObject;
 
 // Pilha que guardará as matrizes de modelagem.
 std::stack<glm::mat4>  g_MatrixStack;
@@ -214,7 +227,9 @@ glm::vec3 g_CameraUp       = glm::vec3(0.0f, 1.0f,  0.0f);
 
 float g_Yaw   = -90.0f;
 float g_Pitch = 0.0f;
-float g_CameraSpeed = 0.005f; // velocidade de movimento
+float g_CameraSpeed = 0.0005f; // velocidade de movimento
+
+GLint g_alpha_uniform;
 
 int main(int argc, char* argv[])
 {
@@ -242,10 +257,11 @@ int main(int argc, char* argv[])
     // funções modernas de OpenGL.
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-    // Criamos uma janela do sistema operacional, com 800 colunas e 600 linhas
-    // de pixels, e com título "INF01047 ...".
+    glfwWindowHint(GLFW_MAXIMIZED, GLFW_TRUE); // Pede para a janela iniciar maximizada
+
+    // JANELA
     GLFWwindow* window;
-    window = glfwCreateWindow(800, 600, "Trabalho Final", NULL, NULL);
+    window = glfwCreateWindow(1280, 720, "Trabalho Final", NULL, NULL);
     if (!window)
     {
         glfwTerminate();
@@ -276,7 +292,6 @@ int main(int argc, char* argv[])
     // redimensionada, por consequência alterando o tamanho do "framebuffer"
     // (região de memória onde são armazenados os pixels da imagem).
     glfwSetFramebufferSizeCallback(window, FramebufferSizeCallback);
-    FramebufferSizeCallback(window, 800, 600); // Forçamos a chamada do callback acima, para definir g_ScreenRatio.
 
     LoadShadersFromFiles();    
     LoadTextureImage("../../data/sky.jpg");         
@@ -309,7 +324,7 @@ int main(int argc, char* argv[])
     glEnable(GL_DEPTH_TEST);
     
     // Habilitamos o Backface Culling. Veja slides 8-13 do documento Aula_02_Fundamentos_Matematicos.pdf, slides 23-34 do documento Aula_13_Clipping_and_Culling.pdf e slides 112-123 do documento Aula_14_Laboratorio_3_Revisao.pdf.
-    glEnable(GL_CULL_FACE);
+    //glEnable(GL_CULL_FACE); // TODO: NÃO PRECISAR COMENTAR ISSO
     glCullFace(GL_BACK);
     glFrontFace(GL_CCW);
     // Ficamos em um loop infinito, renderizando, até que o usuário feche a janela
@@ -349,7 +364,7 @@ int main(int argc, char* argv[])
         // Note que, no sistema de coordenadas da câmera, os planos near e far
         // estão no sentido negativo! Veja slides 176-204 do documento Aula_09_Projecoes.pdf.
         float nearplane = -0.1f;  // Posição do "near plane"
-        float farplane  = -10.0f; // Posição do "far plane"
+        float farplane  = -100.0f; // Posição do "far plane"
 
         if (g_UsePerspectiveProjection)
         {
@@ -378,6 +393,22 @@ int main(int argc, char* argv[])
         #define SKY 0
         #define ROCKS  1        
 
+        // ATUALIZA A POSIÇÃO DO PREVIEW A CADA FRAME (se ele existir)
+        if (g_PreviewObject.has_value())
+        {
+            float distance_to_camera = 2.0f;
+            glm::vec3 previewPos = g_CameraPosition + glm::normalize(g_CameraFront) * distance_to_camera;
+
+            // Precisamos da matriz de visão para alinhar a rotação do preview com o mundo
+            glm::mat4 view = glm::lookAt(g_CameraPosition, g_CameraPosition + g_CameraFront, g_CameraUp);
+            glm::mat3 inverse_rotation = glm::transpose(glm::mat3(view));
+
+            // Atualiza a matriz do objeto de preview
+            g_PreviewObject->modelMatrix = Matrix_Translate(previewPos.x, previewPos.y, previewPos.z)
+                                        * glm::mat4(inverse_rotation)
+                                        * Matrix_Scale(0.2f, 0.2f, 0.2f);
+        }
+        
         // Enviamos as matrizes "view" e "projection" para a placa de vídeo
         // (GPU). Veja o arquivo "shader_vertex.glsl", onde estas são
         // efetivamente aplicadas em todos os pontos.
@@ -386,34 +417,53 @@ int main(int argc, char* argv[])
         // View que acompanha o movimento da câmera 
         glUniformMatrix4fv(g_view_uniform, 1, GL_FALSE, glm::value_ptr(view_no_translation));
         
+        glCullFace(GL_FRONT); // Diz para descartar as faces da FRENTE
+
         // Desenhamos a skybox do céu        
         model = Matrix_Scale(-8.0f, 8.0f, 8.0f) * Matrix_Translate(0.0f,0.0f,0.0f);        
         glUniformMatrix4fv(g_model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
         glUniform1i(g_object_id_uniform, SKY);
-        DrawVirtualObject("skybox_globe");                
+        DrawVirtualObject("skybox_globe");
         
-        if(preview_construction){
-            // Desenhamos o objeto de preview da criação
-            float distance_to_camera = 2.0f;
-            glm::vec3 cubePos = g_CameraPosition + glm::normalize(g_CameraFront) * distance_to_camera;        
-            glm::mat3 rotation_only =  glm::mat3(view);
-            glm::mat3 inverse_rotation = glm::transpose(rotation_only);
-            model = Matrix_Scale( 0.2f, 0.2f, 0.2f) * Matrix_Translate(cubePos.x,cubePos.y,cubePos.z) * glm::mat4(inverse_rotation) ;       
-            glUniformMatrix4fv(g_model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
-            glUniform1i(g_object_id_uniform, ROCKS);
-            DrawVirtualObject("cube");
-        }
-
+        glCullFace(GL_BACK); // VOLTA AO NORMAL para o resto da cena
+        
         // View que não acompanha o movimento da câmera
         glUniformMatrix4fv(g_view_uniform, 1 , GL_FALSE , glm::value_ptr(view));
 
         // Desenhamos o plano do chão
-        model = Matrix_Translate(0.0f,-1.2f, 0.0f);
+        model = Matrix_Translate(0.0f, -1.2f, 0.0f) * Matrix_Scale(100.0f, 1.0f, 100.0f);
         glUniformMatrix4fv(g_model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
         glUniform1i(g_object_id_uniform, ROCKS);
         DrawVirtualObject("floor");
-        
+   
+        // Desenhamos todos os objetos que foram colocados no mundo
+        glUniform1i(g_object_id_uniform, ROCKS);
+        for (const auto& placedObject : g_PlacedObjects)
+        {
+            glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(placedObject.modelMatrix));
+            DrawVirtualObject(placedObject.objectName.c_str());
+        }
 
+        // Desenhamos o objeto de preview, se ele existir
+        if (g_PreviewObject.has_value())
+        {
+             // Habilita o "blending" para transparência
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+            // Define a transparência para o preview
+            glUniform1f(g_alpha_uniform, 0.5f); // 50% transparente
+
+            glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(g_PreviewObject->modelMatrix));
+            glUniform1i(g_object_id_uniform, 2); // Usa a textura do cubo, mas podemos fazer mais...
+
+
+            DrawVirtualObject(g_PreviewObject->objectName.c_str());
+
+            // Desabilita o blending para não afetar o resto da cena (como o texto do FPS)
+            glDisable(GL_BLEND);
+        }
+        
         // Imprimimos na tela informação sobre o número de quadros renderizados
         // por segundo (frames per second).
         TextRendering_ShowFramesPerSecond(window);
@@ -535,24 +585,6 @@ void DrawVirtualObject(const char* object_name)
 //
 void LoadShadersFromFiles()
 {
-    // Note que o caminho para os arquivos "shader_vertex.glsl" e
-    // "shader_fragment.glsl" estão fixados, sendo que assumimos a existência
-    // da seguinte estrutura no sistema de arquivos:
-    //
-    //    + FCG_Lab_01/
-    //    |
-    //    +--+ bin/
-    //    |  |
-    //    |  +--+ Release/  (ou Debug/ ou Linux/)
-    //    |     |
-    //    |     o-- main.exe
-    //    |
-    //    +--+ src/
-    //       |
-    //       o-- shader_vertex.glsl
-    //       |
-    //       o-- shader_fragment.glsl
-    //
     GLuint vertex_shader_id = LoadShader_Vertex("../../src/shader_vertex.glsl");
     GLuint fragment_shader_id = LoadShader_Fragment("../../src/shader_fragment.glsl");
 
@@ -572,6 +604,7 @@ void LoadShadersFromFiles()
     g_object_id_uniform  = glGetUniformLocation(g_GpuProgramID, "object_id"); // Variável "object_id" em shader_fragment.glsl
     g_bbox_min_uniform   = glGetUniformLocation(g_GpuProgramID, "bbox_min");
     g_bbox_max_uniform   = glGetUniformLocation(g_GpuProgramID, "bbox_max");
+    g_alpha_uniform      = glGetUniformLocation(g_GpuProgramID, "u_alpha");
 
     // Variáveis em "shader_fragment.glsl" para acesso das imagens de textura
     glUseProgram(g_GpuProgramID);
@@ -986,13 +1019,32 @@ double g_LastCursorPosX, g_LastCursorPosY;
 // Função callback chamada sempre que o usuário aperta algum dos botões do mouse
 void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
 {
+    // SE O BOTÃO DIREITO FOR PRESSIONADO: Criamos o preview
     if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_PRESS)
     {
-        preview_construction = true; 
+        // Posição inicial do preview
+        float distance_to_camera = 2.0f;
+        glm::vec3 previewPos = g_CameraPosition + glm::normalize(g_CameraFront) * distance_to_camera;
+
+        // Matriz de transformação inicial (será atualizada a cada frame)
+        glm::mat4 previewModel = Matrix_Translate(previewPos.x, previewPos.y, previewPos.z)
+                               * Matrix_Scale(0.2f, 0.2f, 0.2f);
+
+        // Criamos o objeto de preview e o colocamos na nossa variável optional
+        g_PreviewObject.emplace(PlacedObject{"cube", previewModel});
     }
+
+    // SE O BOTÃO DIREITO FOR SOLTO: Destruímos o preview
     if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_RELEASE)
     {
-        preview_construction = false;        
+        g_PreviewObject.reset(); // Esvazia o optional
+    }
+
+    // SE O BOTÃO ESQUERDO FOR PRESSIONADO E O PREVIEW EXISTIR: Colocamos o objeto no mundo
+    if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS && g_PreviewObject.has_value())
+    {
+        // Adiciona uma cópia do objeto de preview ao nosso vetor de objetos permanentes
+        g_PlacedObjects.push_back(g_PreviewObject.value());
     }
 }
 
@@ -1000,7 +1052,7 @@ void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
 // cima da janela OpenGL.
 void CursorPosCallback(GLFWwindow* window, double xpos, double ypos)
 {
-    float sensitivity = 0.1f;
+    float sensitivity = 0.08f;
     float dx = xpos - g_LastCursorPosX;
     float dy = g_LastCursorPosY - ypos; // Invertido!
 
