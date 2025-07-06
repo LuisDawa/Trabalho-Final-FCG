@@ -133,6 +133,7 @@ void KeyPress(GLFWwindow* window);
 void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods);
 void CursorPosCallback(GLFWwindow* window, double xpos, double ypos);
 void ScrollCallback(GLFWwindow* window, double xoffset, double yoffset);
+glm::mat4 getCameraView();
 
 // Definimos uma estrutura que armazenará dados necessários para renderizar
 // cada objeto da cena virtual.
@@ -180,7 +181,9 @@ bool g_MiddleMouseButtonPressed = false; // Análogo para botão do meio do mous
 // renderização.
 float g_CameraTheta = 0.0f; // Ângulo no plano ZX em relação ao eixo Z
 float g_CameraPhi = 0.0f;   // Ângulo em relação ao eixo Y
-float g_CameraDistance = 3.5f; // Distância da câmera para a origem
+float g_CameraDistance = 2.0f; // Distância da câmera para a origem
+
+bool freeCamera = true;
 
 // Variáveis que controlam rotação do antebraço
 float g_ForearmAngleZ = 0.0f;
@@ -280,8 +283,8 @@ int main(int argc, char* argv[])
 
     LoadShadersFromFiles();    
     LoadTextureImage("../../data/sky.jpg");         
-    LoadTextureImage("../../data/floor.jpg");   
-    LoadTextureImage("../../data/sky2.jpg");           
+    LoadTextureImage("../../data/floor.jpg");        
+    LoadTextureImage("../../data/wood.jpg");  
     
     ObjModel skyboxmodel("../../data/skybox.obj");
     ComputeNormals(&skyboxmodel);
@@ -295,6 +298,9 @@ int main(int argc, char* argv[])
     ComputeNormals(&cubemodel);
     BuildTrianglesAndAddToVirtualScene(&cubemodel);
     
+    ObjModel tablemodel("../../data/table.obj");
+    ComputeNormals(&tablemodel);
+    BuildTrianglesAndAddToVirtualScene(&tablemodel);
 
     if ( argc > 1 )
     {
@@ -334,12 +340,7 @@ int main(int argc, char* argv[])
         // os shaders de vértice e fragmentos).
         glUseProgram(g_GpuProgramID);
 
-        // Controla a direção que a camera esta olhando
-        glm::mat4 view = glm::lookAt(
-            g_CameraPosition,
-            g_CameraPosition + g_CameraFront,
-            g_CameraUp
-        );
+        glm::mat4 view = getCameraView();
 
         glm::mat4 view_no_translation = glm::mat4(glm::mat3(view));
 
@@ -376,7 +377,8 @@ int main(int argc, char* argv[])
 
         // Define as constantes de cada textura. Devem ser as mesmas do arquivo shader_fragment.glsl
         #define SKY 0
-        #define ROCKS  1        
+        #define ROCKS 1        
+        #define WOOD 2
 
         // Enviamos as matrizes "view" e "projection" para a placa de vídeo
         // (GPU). Veja o arquivo "shader_vertex.glsl", onde estas são
@@ -412,6 +414,11 @@ int main(int argc, char* argv[])
         glUniformMatrix4fv(g_model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
         glUniform1i(g_object_id_uniform, ROCKS);
         DrawVirtualObject("floor");
+
+        model = Matrix_Translate(0.0f, 0.0f, 0.0f);
+        glUniformMatrix4fv(g_model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
+        glUniform1i(g_object_id_uniform, WOOD);
+        DrawVirtualObject("table");
         
 
         // Imprimimos na tela informação sobre o número de quadros renderizados
@@ -577,7 +584,7 @@ void LoadShadersFromFiles()
     glUseProgram(g_GpuProgramID);
     glUniform1i(glGetUniformLocation(g_GpuProgramID, "SkyboxTexture"), 0);
     glUniform1i(glGetUniformLocation(g_GpuProgramID, "FloorTexture"), 1);
-    glUniform1i(glGetUniformLocation(g_GpuProgramID, "CubeTexture"), 2);
+    glUniform1i(glGetUniformLocation(g_GpuProgramID, "WoodTexture"), 2);
     glUseProgram(0);
 }
 
@@ -1062,6 +1069,9 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
     {
         g_AngleZ += (mod & GLFW_MOD_SHIFT) ? -delta : delta;
     }
+    if (key == GLFW_KEY_C && action == GLFW_PRESS){
+        freeCamera = !freeCamera;       
+    }
 
     // Se o usuário apertar a tecla espaço, resetamos os ângulos de Euler para zero.
     if (key == GLFW_KEY_SPACE && action == GLFW_PRESS)
@@ -1107,6 +1117,35 @@ void KeyPress(GLFWwindow* window)
 
     if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
         g_CameraPosition += g_CameraSpeed * right;    
+
+}
+
+// Controla a direção que a camera esta olhando
+glm::mat4 getCameraView()
+{
+    glm::mat4 view;
+    if(freeCamera){
+        view = glm::lookAt(
+            g_CameraPosition,
+            g_CameraPosition + g_CameraFront,
+            g_CameraUp
+        );
+    }
+    else{
+        float r = g_CameraDistance;
+        float y = r*sin(g_CameraPhi);
+        float z = r*cos(g_CameraPhi)*cos(g_CameraTheta);
+        float x = r*cos(g_CameraPhi)*sin(g_CameraTheta);
+
+        // Abaixo definimos as varáveis que efetivamente definem a câmera virtual.
+        glm::vec4 camera_position_c  = glm::vec4(x,y,z,1.0f); // Ponto "c", centro da câmera
+        glm::vec4 camera_lookat_l    = glm::vec4(0.0f,0.0f,0.0f,1.0f); // Ponto "l", para onde a câmera (look-at) estará sempre olhando
+        glm::vec4 camera_view_vector = camera_lookat_l - camera_position_c; // Vetor "view", sentido para onde a câmera está virada
+        glm::vec4 camera_up_vector   = glm::vec4(0.0f,1.0f,0.0f,0.0f); // Vetor "up" fixado para apontar para o "céu" (eito Y global)
+
+        view = Matrix_Camera_View(camera_position_c, camera_view_vector, camera_up_vector);
+    }
+    return view;
 }
 
 // Definimos o callback para impressão de erros da GLFW no terminal

@@ -21,6 +21,7 @@ uniform mat4 projection;
 // Identificador que define qual objeto está sendo desenhado no momento
 #define SKY  0
 #define ROCKS  1
+#define WOOD  2
 uniform int object_id;
 
 // Parâmetros da axis-aligned bounding box (AABB) do modelo
@@ -30,6 +31,7 @@ uniform vec4 bbox_max;
 // Variáveis para acesso das imagens de textura
 uniform sampler2D FloorTexture;
 uniform sampler2D SkyboxTexture;
+uniform sampler2D WoodTexture;
 
 // O valor de saída ("out") de um Fragment Shader é a cor final do fragmento.
 out vec4 color;
@@ -43,7 +45,7 @@ void main()
     vec4 origin = vec4(0.0, 0.0, 0.0, 1.0);
     vec4 camera_position = inverse(view) * origin;
 
-    vec4 p = position_world;
+    vec4 p = position_world;    
     vec4 n = normalize(normal);
     vec4 l = normalize(vec4(1.0,1.0,0.0,0.0));
     vec4 v = normalize(camera_position - p);
@@ -60,6 +62,13 @@ void main()
 
         Kd0 = texture(FloorTexture, vec2(U,V)).rgb;    
     }
+    if ( object_id == WOOD )
+    {
+        U = texcoords.x;
+        V = texcoords.y;           
+
+        Kd0 = texture(WoodTexture, vec2(U,V)).rgb;    
+    }
     else if( object_id == SKY )
     {
         vec4 bbox_center = (bbox_min + bbox_max) / 2.0;
@@ -74,7 +83,7 @@ void main()
         
     if( object_id != SKY ){  // Objetos que devem ter sobreamento
         float lambert = max(0,dot(n,l));
-        color.rgb = Kd0 * (lambert + 0.01);
+        color.rgb = Kd0 * (lambert + 1);
     }
 
     color.a = 1;
