@@ -1,6 +1,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <math.h>
 
 // Headers abaixo são específicos de C++
 #include <map>
@@ -134,6 +135,8 @@ void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods);
 void CursorPosCallback(GLFWwindow* window, double xpos, double ypos);
 void ScrollCallback(GLFWwindow* window, double xoffset, double yoffset);
 glm::mat4 getCameraView();
+glm::vec3 bezierCubic(glm::vec3 p0, glm::vec3 p1, glm::vec3 p2, glm::vec3 p3, float t);
+glm::vec3 sunPosition();
 
 // Definimos uma estrutura que armazenará dados necessários para renderizar
 // cada objeto da cena virtual.
@@ -220,6 +223,25 @@ glm::vec3 g_CameraUp       = glm::vec3(0.0f, 1.0f,  0.0f);
 float g_Yaw   = -90.0f;
 float g_Pitch = 0.0f;
 float g_CameraSpeed = 0.005f; // velocidade de movimento
+float sun_speed = 0.001f;
+float sun_position = 0.0f;
+
+std::vector<glm::vec3> controlPoints = {
+    // Primeiro segmento (P0 a P3)
+    glm::vec3(0.0f, 1.0f, 5.0f),    // P0: Começo (frente)
+    glm::vec3(3.5f, 1.0f, 3.5f),     // P1: Controle (diagonal direita-frente)
+    glm::vec3(5.0f, 1.0f, 0.0f),     // P2: Controle (direita)
+    glm::vec3(3.5f, 1.0f, -3.5f),    // P3: Fim (diagonal direita-trás)
+
+    // Segundo segmento (P3 a P6)
+    glm::vec3(0.0f, 1.0f, -5.0f),    // P4: Controle (trás)
+    glm::vec3(-3.5f, 1.0f, -3.5f),   // P5: Controle (diagonal esquerda-trás)
+    glm::vec3(-5.0f, 1.0f, 0.0f),    // P6: Controle (esquerda)
+    glm::vec3(-3.5f, 1.0f, 3.5f),    // P7: Controle (diagonal esquerda-frente)
+
+    // Fecha o loop (P7 de volta a P0)
+    glm::vec3(0.0f, 1.0f, 5.0f)      // P8 = P0
+};
 
 int main(int argc, char* argv[])
 {
@@ -288,6 +310,7 @@ int main(int argc, char* argv[])
     LoadTextureImage("../../data/floor.jpg");        
     LoadTextureImage("../../data/wood.jpg");  
     LoadTextureImage("../../data/concrete.jpg"); 
+    LoadTextureImage("../../data/rubber.jpg"); 
     
     ObjModel skyboxmodel("../../data/skybox.obj");
     ComputeNormals(&skyboxmodel);
@@ -313,6 +336,10 @@ int main(int argc, char* argv[])
     ComputeNormals(&ceilingmodel);
     BuildTrianglesAndAddToVirtualScene(&ceilingmodel);
 
+    ObjModel spheremodel("../../data/sphere.obj");
+    ComputeNormals(&spheremodel);
+    BuildTrianglesAndAddToVirtualScene(&spheremodel);
+
 
     if ( argc > 1 )
     {
@@ -330,8 +357,15 @@ int main(int argc, char* argv[])
     glEnable(GL_CULL_FACE);
     glCullFace(GL_BACK);
     glFrontFace(GL_CCW);
-    // Ficamos em um loop infinito, renderizando, até que o usuário feche a janela
     
+    // Define as constantes de cada textura. Devem ser as mesmas do arquivo shader_fragment.glsl
+    #define SKY 0
+    #define ROCKS 1        
+    #define WOOD 2
+    #define CONCRETE 3
+    #define RUBBER 4
+    
+    // Ficamos em um loop infinito, renderizando, até que o usuário feche a janela
     while (!glfwWindowShouldClose(window))
     {
         // Aqui executamos as operações de renderização
@@ -387,12 +421,6 @@ int main(int argc, char* argv[])
 
         glm::mat4 model = Matrix_Identity(); // Transformação identidade de modelagem
 
-        // Define as constantes de cada textura. Devem ser as mesmas do arquivo shader_fragment.glsl
-        #define SKY 0
-        #define ROCKS 1        
-        #define WOOD 2
-        #define CONCRETE 3
-
         // Enviamos as matrizes "view" e "projection" para a placa de vídeo
         // (GPU). Veja o arquivo "shader_vertex.glsl", onde estas são
         // efetivamente aplicadas em todos os pontos.
@@ -438,10 +466,21 @@ int main(int argc, char* argv[])
         glUniform1i(g_object_id_uniform, CONCRETE);
         DrawVirtualObject("wall");
 
-        model = Matrix_Scale( 0.2f, 0.2f, 0.2f) * Matrix_Translate(0.0f, 1.0f, 0.0f);
+        model = Matrix_Scale( 0.1f, 0.1f, 0.1f) * Matrix_Translate(0.0f, 1.0f, 0.0f);
         glUniformMatrix4fv(g_model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
         glUniform1i(g_object_id_uniform, CONCRETE);
         DrawVirtualObject("ceiling");
+
+        model = Matrix_Scale( 0.04f, 0.04f, 0.04f) * Matrix_Translate(0.0f, 0.5f, 0.0f);
+        glUniformMatrix4fv(g_model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
+        glUniform1i(g_object_id_uniform, RUBBER);
+        DrawVirtualObject("sphere");
+
+        glm::vec3 sun_position = sunPosition();
+        model = Matrix_Scale( 0.1f, 0.1f, 0.1f) * Matrix_Translate(sun_position.x, sun_position.y, sun_position.z);
+        glUniformMatrix4fv(g_model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
+        glUniform1i(g_object_id_uniform, ROCKS);
+        DrawVirtualObject("sphere");
         
 
         // Imprimimos na tela informação sobre o número de quadros renderizados
@@ -600,6 +639,7 @@ void LoadShadersFromFiles()
     glUniform1i(glGetUniformLocation(g_GpuProgramID, "FloorTexture"), 1);
     glUniform1i(glGetUniformLocation(g_GpuProgramID, "WoodTexture"), 2);
     glUniform1i(glGetUniformLocation(g_GpuProgramID, "ConcreteTexture"), 3);
+    glUniform1i(glGetUniformLocation(g_GpuProgramID, "RubberTexture"), 4);
     glUseProgram(0);
 }
 
@@ -1016,6 +1056,44 @@ void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
     {
         preview_construction = false;        
     }
+}
+
+// Atualiza e retorna a posição atual do objeto
+glm::vec3 sunPosition() {
+    sun_position += sun_speed;
+
+    // Reinicia o loop quando t > 1.0
+    if (sun_position >= 1.0f) {
+        sun_position = 0.0f;
+    }
+
+    // Calcula o segmento atual (0 ou 1, para os dois segmentos)
+    int segment = static_cast<int>(sun_position * 2); // Dois segmentos
+    float segmentT = fmod(sun_position * 2, 1.0f);   // t local ao segmento
+
+    // Obtém os pontos do segmento atual
+    glm::vec3 p0 = controlPoints[segment * 4];
+    glm::vec3 p1 = controlPoints[segment * 4 + 1];
+    glm::vec3 p2 = controlPoints[segment * 4 + 2];
+    glm::vec3 p3 = controlPoints[segment * 4 + 3];
+
+    return bezierCubic(p0, p1, p2, p3, segmentT);
+}
+
+glm::vec3 bezierCubic(glm::vec3 p0, glm::vec3 p1, glm::vec3 p2, glm::vec3 p3, float t) {
+    glm::vec3 result;
+    float u = 1.0f - t;
+    float tt = t * t;
+    float uu = u * u;
+    float uuu = uu * u;
+    float ttt = tt * t;
+
+    // Fórmula da Bézier cúbica
+    result.x = uuu * p0.x + 3 * uu * t * p1.x + 3 * u * tt * p2.x + ttt * p3.x;
+    result.y = uuu * p0.y + 3 * uu * t * p1.y + 3 * u * tt * p2.y + ttt * p3.y;
+    result.z = uuu * p0.z + 3 * uu * t * p1.z + 3 * u * tt * p2.z + ttt * p3.z;
+
+    return result;
 }
 
 // Função callback chamada sempre que o usuário movimentar o cursor do mouse em

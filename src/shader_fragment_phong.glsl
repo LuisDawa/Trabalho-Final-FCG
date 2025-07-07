@@ -23,6 +23,7 @@ uniform mat4 projection;
 #define ROCKS  1
 #define WOOD  2
 #define CONCRETE  3
+#define RUBBER  4
 uniform int object_id;
 
 // Parâmetros da axis-aligned bounding box (AABB) do modelo
@@ -34,6 +35,7 @@ uniform sampler2D FloorTexture;
 uniform sampler2D SkyboxTexture;
 uniform sampler2D WoodTexture;
 uniform sampler2D ConcreteTexture;
+uniform sampler2D RubberTexture;
 
 // O valor de saída ("out") de um Fragment Shader é a cor final do fragmento.
 out vec4 color;
@@ -82,6 +84,13 @@ void main()
         V = texcoords.y;           
 
         Kd = texture(ConcreteTexture, vec2(U,V)).rgb;    
+    }
+    if ( object_id == RUBBER )
+    {
+        U = texcoords.x;
+        V = texcoords.y;           
+
+        Kd = texture(RubberTexture, vec2(U,V)).rgb;    
     }
     else if( object_id == SKY )
     {
