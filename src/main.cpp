@@ -217,7 +217,7 @@ glm::vec3 g_CameraUp       = glm::vec3(0.0f, 1.0f,  0.0f);
 
 float g_Yaw   = -90.0f;
 float g_Pitch = 0.0f;
-float g_CameraSpeed = 0.005f; // velocidade de movimento
+float g_CameraSpeed = 0.0005f; // velocidade de movimento
 
 int main(int argc, char* argv[])
 {
@@ -245,10 +245,11 @@ int main(int argc, char* argv[])
     // funções modernas de OpenGL.
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-    // Criamos uma janela do sistema operacional, com 800 colunas e 600 linhas
-    // de pixels, e com título "INF01047 ...".
+    glfwWindowHint(GLFW_MAXIMIZED, GLFW_TRUE); // Pede para a janela iniciar maximizada
+
+    // JANELA
     GLFWwindow* window;
-    window = glfwCreateWindow(800, 600, "Trabalho Final", NULL, NULL);
+    window = glfwCreateWindow(1280, 720, "Trabalho Final", NULL, NULL);
     if (!window)
     {
         glfwTerminate();
@@ -279,7 +280,6 @@ int main(int argc, char* argv[])
     // redimensionada, por consequência alterando o tamanho do "framebuffer"
     // (região de memória onde são armazenados os pixels da imagem).
     glfwSetFramebufferSizeCallback(window, FramebufferSizeCallback);
-    FramebufferSizeCallback(window, 800, 600); // Forçamos a chamada do callback acima, para definir g_ScreenRatio.
 
     LoadShadersFromFiles();    
     LoadTextureImage("../../data/sky.jpg");         
@@ -350,7 +350,7 @@ int main(int argc, char* argv[])
         // Note que, no sistema de coordenadas da câmera, os planos near e far
         // estão no sentido negativo! Veja slides 176-204 do documento Aula_09_Projecoes.pdf.
         float nearplane = -0.1f;  // Posição do "near plane"
-        float farplane  = -10.0f; // Posição do "far plane"
+        float farplane  = -100.0f; // Posição do "far plane"
 
         if (g_UsePerspectiveProjection)
         {
@@ -542,24 +542,6 @@ void DrawVirtualObject(const char* object_name)
 //
 void LoadShadersFromFiles()
 {
-    // Note que o caminho para os arquivos "shader_vertex.glsl" e
-    // "shader_fragment.glsl" estão fixados, sendo que assumimos a existência
-    // da seguinte estrutura no sistema de arquivos:
-    //
-    //    + FCG_Lab_01/
-    //    |
-    //    +--+ bin/
-    //    |  |
-    //    |  +--+ Release/  (ou Debug/ ou Linux/)
-    //    |     |
-    //    |     o-- main.exe
-    //    |
-    //    +--+ src/
-    //       |
-    //       o-- shader_vertex.glsl
-    //       |
-    //       o-- shader_fragment.glsl
-    //
     GLuint vertex_shader_id = LoadShader_Vertex("../../src/shader_vertex.glsl");
     GLuint fragment_shader_id = LoadShader_Fragment("../../src/shader_fragment.glsl");
 
@@ -1007,7 +989,7 @@ void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
 // cima da janela OpenGL.
 void CursorPosCallback(GLFWwindow* window, double xpos, double ypos)
 {
-    float sensitivity = 0.1f;
+    float sensitivity = 0.08f;
     float dx = xpos - g_LastCursorPosX;
     float dy = g_LastCursorPosY - ypos; // Invertido!
 
