@@ -199,6 +199,8 @@ bool g_UsePerspectiveProjection = true;
 // Variável que controla se o texto informativo será mostrado na tela.
 bool g_ShowInfoText = true;
 
+bool interpolationPhong = true;  // false = Gouraud
+
 // Variáveis que definem um programa de GPU (shaders). Veja função LoadShadersFromFiles().
 GLuint g_GpuProgramID = 0;
 GLint g_model_uniform;
@@ -542,8 +544,17 @@ void DrawVirtualObject(const char* object_name)
 //
 void LoadShadersFromFiles()
 {
-    GLuint vertex_shader_id = LoadShader_Vertex("../../src/shader_vertex.glsl");
-    GLuint fragment_shader_id = LoadShader_Fragment("../../src/shader_fragment.glsl");
+    std::string shader_vertex_path, shader_fragment_path;
+    if(interpolationPhong){
+        shader_vertex_path = "../../src/shader_vertex_phong.glsl";
+        shader_fragment_path = "../../src/shader_fragment_phong.glsl";
+    }
+    else{
+        shader_vertex_path = "../../src/shader_vertex_gouraud.glsl";
+        shader_fragment_path = "../../src/shader_fragment_gouraud.glsl";
+    }
+    GLuint vertex_shader_id = LoadShader_Vertex(shader_vertex_path.c_str());
+    GLuint fragment_shader_id = LoadShader_Fragment(shader_fragment_path.c_str());
 
     // Deletamos o programa de GPU anterior, caso ele exista.
     if ( g_GpuProgramID != 0 )
@@ -1076,6 +1087,7 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
     // Se o usuário apertar a tecla R, recarregamos os shaders dos arquivos "shader_fragment.glsl" e "shader_vertex.glsl".
     if (key == GLFW_KEY_R && action == GLFW_PRESS)
     {
+        interpolationPhong = !interpolationPhong;
         LoadShadersFromFiles();
         fprintf(stdout,"Shaders recarregados!\n");
         fflush(stdout);
