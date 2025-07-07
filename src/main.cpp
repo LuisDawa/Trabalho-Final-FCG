@@ -153,8 +153,8 @@ struct PlacedObject
 {
     std::string objectName;
     glm::mat4   modelMatrix;
+    bool        isFalling;
 };
-
 
 // Abaixo definimos variáveis globais utilizadas em várias funções do código.
 
@@ -230,6 +230,131 @@ float g_Pitch = 0.0f;
 float g_CameraSpeed = 0.0005f; // velocidade de movimento
 
 GLint g_alpha_uniform;
+
+// FÍSICA
+// Variável para controlar o tempo entre os frames (para a física)
+float g_DeltaTime = 0.0f;
+float g_LastFrame = 0.0f;
+
+// Estrutura para representar uma AABB no espaço do mundo
+struct WorldAABB {
+    glm::vec3 min;
+    glm::vec3 max;
+};
+
+// Converte a AABB local de um objeto para uma AABB no espaço do mundo
+WorldAABB GetWorldAABB(const PlacedObject& object)
+{
+    // Pega a AABB local do modelo original
+    const SceneObject& sceneObj = g_VirtualScene[object.objectName];
+    glm::vec3 local_min = sceneObj.bbox_min;
+    glm::vec3 local_max = sceneObj.bbox_max;
+
+    // Transforma os 8 cantos da AABB local para o espaço do mundo
+    glm::vec3 corners[8] = {
+        glm::vec3(local_min.x, local_min.y, local_min.z),
+        glm::vec3(local_max.x, local_min.y, local_min.z),
+        glm::vec3(local_min.x, local_max.y, local_min.z),
+        glm::vec3(local_min.x, local_min.y, local_max.z),
+        glm::vec3(local_max.x, local_max.y, local_min.z),
+        glm::vec3(local_min.x, local_max.y, local_max.z),
+        glm::vec3(local_max.x, local_min.y, local_max.z),
+        glm::vec3(local_max.x, local_max.y, local_max.z)
+    };
+
+    // Inicializa a AABB do mundo com o primeiro canto transformado
+    WorldAABB world_aabb;
+    world_aabb.min = world_aabb.max = glm::vec3(object.modelMatrix * glm::vec4(corners[0], 1.0f));
+
+    // Encontra os pontos mínimo e máximo entre todos os cantos transformados
+    for (int i = 1; i < 8; ++i) {
+        glm::vec3 transformed_corner = glm::vec3(object.modelMatrix * glm::vec4(corners[i], 1.0f));
+        world_aabb.min = glm::min(world_aabb.min, transformed_corner);
+        world_aabb.max = glm::max(world_aabb.max, transformed_corner);
+    }
+
+    return world_aabb;
+}
+
+// Verifica se duas AABBs (a e b) estão colidindo
+bool CheckAABBCollision(const WorldAABB& a, const WorldAABB& b)
+{
+    // Retorna true se houver sobreposição em todos os 3 eixos (X, Y, Z)
+    return (a.min.x <= b.max.x && a.max.x >= b.min.x) &&
+           (a.min.y <= b.max.y && a.max.y >= b.min.y) &&
+           (a.min.z <= b.max.z && a.max.z >= b.min.z);
+}
+
+void UpdatePhysics()
+{
+    // Define a "gravidade" - a velocidade de queda em unidades por segundo
+    const float gravity = -2.0f; // Ajuste este valor para uma queda mais rápida ou lenta
+    float fall_distance = gravity * g_DeltaTime;
+
+    // Define a AABB para o chão
+    WorldAABB floor_aabb;
+    const float infinity = std::numeric_limits<float>::max();
+    const float neg_infinity = std::numeric_limits<float>::lowest();
+
+    // O chão é um plano fino em y = -1.2, mas infinito em x e z.
+    floor_aabb.min = glm::vec3(neg_infinity, -1.3f, neg_infinity);
+    floor_aabb.max = glm::vec3(   infinity, -1.2f,    infinity);
+
+    // Itera por todos os objetos colocados na cena (de trás para frente para evitar problemas ao remover)
+    for (auto& falling_object : g_PlacedObjects)
+    {
+        // Pula este objeto se ele já parou de cair
+        if (!falling_object.isFalling) {
+            continue;
+        }
+
+        // Pega a AABB atual do objeto que está caindo
+        WorldAABB current_aabb = GetWorldAABB(falling_object);
+
+        // Cria uma AABB "futura" para prever a colisão no próximo passo
+        WorldAABB future_aabb = current_aabb;
+        future_aabb.min.y += fall_distance;
+        future_aabb.max.y += fall_distance;
+
+        bool has_collided = false;
+
+        // 1. Checa colisão com o chão
+        if (CheckAABBCollision(future_aabb, floor_aabb)) {
+            has_collided = true;
+        }
+
+        // 2. Checa colisão com todos os outros objetos
+        if (!has_collided) {
+            for (const auto& other_object : g_PlacedObjects)
+            {
+                // Não checa colisão com ele mesmo!
+                if (&falling_object == &other_object) {
+                    continue;
+                }
+                
+                // Pula a checagem se o outro objeto também estiver caindo (opcional, pode criar pilhas mais estáveis)
+                // if (other_object.isFalling) {
+                //     continue;
+                // }
+
+                WorldAABB other_aabb = GetWorldAABB(other_object);
+                if (CheckAABBCollision(future_aabb, other_aabb)) {
+                    has_collided = true;
+                    break; // Sai do loop interno, já encontrou uma colisão
+                }
+            }
+        }
+
+        // Atualiza o estado do objeto
+        if (has_collided) {
+            // Se colidiu, para de cair
+            falling_object.isFalling = false;
+        } else {
+            // Se não colidiu, aplica o movimento de queda
+            falling_object.modelMatrix = glm::translate(falling_object.modelMatrix, glm::vec3(0.0f, fall_distance, 0.0f));
+        }
+    }
+}
 
 int main(int argc, char* argv[])
 {
@@ -331,6 +456,14 @@ int main(int argc, char* argv[])
     
     while (!glfwWindowShouldClose(window))
     {
+        // --- Cálculo do DeltaTime ---
+        float currentFrame = (float)glfwGetTime();
+        g_DeltaTime = currentFrame - g_LastFrame;
+        g_LastFrame = currentFrame;
+
+        // --- ATUALIZAÇÃO DA FÍSICA ---
+        UpdatePhysics(); // <<-- CHAME A FUNÇÃO AQUI!
+
         // Aqui executamos as operações de renderização
 
         // Definimos a cor do "fundo" do framebuffer como branco.  Tal cor é
@@ -522,8 +655,8 @@ void LoadTextureImage(const char* filename)
     glGenSamplers(1, &sampler_id);
 
     // Veja slides 95-96 do documento Aula_20_Mapeamento_de_Texturas.pdf
-    glSamplerParameteri(sampler_id, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glSamplerParameteri(sampler_id, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glSamplerParameteri(sampler_id, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glSamplerParameteri(sampler_id, GL_TEXTURE_WRAP_T, GL_REPEAT);
 
     // Parâmetros de amostragem da textura.
     glSamplerParameteri(sampler_id, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
@@ -1043,8 +1176,14 @@ void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
     // SE O BOTÃO ESQUERDO FOR PRESSIONADO E O PREVIEW EXISTIR: Colocamos o objeto no mundo
     if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS && g_PreviewObject.has_value())
     {
-        // Adiciona uma cópia do objeto de preview ao nosso vetor de objetos permanentes
-        g_PlacedObjects.push_back(g_PreviewObject.value());
+        // Pega o objeto do preview
+        PlacedObject newObject = g_PreviewObject.value();
+
+        // Define que o novo objeto deve começar caindo
+        newObject.isFalling = true; // <-- ADICIONE ESTA LINHA
+
+        // Adiciona a cópia do objeto ao nosso vetor de objetos permanentes
+        g_PlacedObjects.push_back(newObject);
     }
 }
 

@@ -55,8 +55,11 @@ void main()
     // --- Lógica de Textura ---
     if ( object_id == ROCKS )
     {
-        // Usa as coordenadas de textura do OBJ para o chão
-        vec2 uv = texcoords;
+        // Multiplica as coordenadas de textura por um fator para repetir a textura (tiling).
+        // Altere o valor 50.0 para deixar as pedras maiores ou menores.
+        vec2 uv = texcoords * 50.0; 
+
+        // Usa as novas coordenadas "repetidas" para buscar a cor da textura.
         Kd0 = texture(FloorTexture, uv).rgb;
     }
     else if( object_id == SKY )
