@@ -137,6 +137,7 @@ void ScrollCallback(GLFWwindow* window, double xoffset, double yoffset);
 glm::mat4 getCameraView();
 glm::vec3 bezierCubic(glm::vec3 p0, glm::vec3 p1, glm::vec3 p2, glm::vec3 p3, float t);
 glm::vec3 sunPosition();
+void drawConstructionPreview(glm::mat4 model, glm::mat4 view);
 
 // Definimos uma estrutura que armazenará dados necessários para renderizar
 // cada objeto da cena virtual.
@@ -252,6 +253,16 @@ std::vector<glm::vec3> controlPoints = {
     glm::vec3(-c, h, r),
     glm::vec3(0.0f, h, r) // Fecha o ciclo (mesmo do início)
 };
+
+int currentBuildSelection = 0;  // varia de zero a 4, pois são 5 construções
+
+// Define as constantes de cada textura. Devem ser as mesmas do arquivo shader_fragment.glsl
+#define SKY 0
+#define ROCKS 1        
+#define WOOD 2
+#define CONCRETE 3
+#define RUBBER 4
+#define FIRE 5
 
 int main(int argc, char* argv[])
 {
@@ -369,14 +380,6 @@ int main(int argc, char* argv[])
     glCullFace(GL_BACK);
     glFrontFace(GL_CCW);
     
-    // Define as constantes de cada textura. Devem ser as mesmas do arquivo shader_fragment.glsl
-    #define SKY 0
-    #define ROCKS 1        
-    #define WOOD 2
-    #define CONCRETE 3
-    #define RUBBER 4
-    #define FIRE 5
-    
     // Ficamos em um loop infinito, renderizando, até que o usuário feche a janela
     while (!glfwWindowShouldClose(window))
     {
@@ -448,15 +451,7 @@ int main(int argc, char* argv[])
         DrawVirtualObject("skybox_globe");                
         
         if(preview_construction){
-            // Desenhamos o objeto de preview da criação
-            float distance_to_camera = 2.0f;
-            glm::vec3 cubePos = g_CameraPosition + glm::normalize(g_CameraFront) * distance_to_camera;        
-            glm::mat3 rotation_only =  glm::mat3(view);
-            glm::mat3 inverse_rotation = glm::transpose(rotation_only);
-            model = Matrix_Scale( 0.2f, 0.2f, 0.2f) * Matrix_Translate(cubePos.x,cubePos.y,cubePos.z) * glm::mat4(inverse_rotation) ;       
-            glUniformMatrix4fv(g_model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
-            glUniform1i(g_object_id_uniform, ROCKS);
-            DrawVirtualObject("cube");
+            drawConstructionPreview(model, view);
         }
 
         // View que não acompanha o movimento da câmera
@@ -468,26 +463,7 @@ int main(int argc, char* argv[])
         glUniform1i(g_object_id_uniform, ROCKS);
         DrawVirtualObject("floor");
 
-        model = Matrix_Scale( 0.2f, 0.2f, 0.2f) * Matrix_Translate(0.0f, -1.0f, 0.0f);
-        glUniformMatrix4fv(g_model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
-        glUniform1i(g_object_id_uniform, WOOD);
-        DrawVirtualObject("table");
-
-        model = Matrix_Scale( 0.2f, 0.2f, 0.2f) * Matrix_Translate(1.0f, 0.0f, 1.0f);
-        glUniformMatrix4fv(g_model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
-        glUniform1i(g_object_id_uniform, CONCRETE);
-        DrawVirtualObject("wall");
-
-        model = Matrix_Scale( 0.1f, 0.1f, 0.1f) * Matrix_Translate(0.0f, 1.0f, 0.0f);
-        glUniformMatrix4fv(g_model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
-        glUniform1i(g_object_id_uniform, CONCRETE);
-        DrawVirtualObject("ceiling");
-
-        model = Matrix_Scale( 0.04f, 0.04f, 0.04f) * Matrix_Translate(0.0f, 0.5f, 0.0f);
-        glUniformMatrix4fv(g_model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
-        glUniform1i(g_object_id_uniform, RUBBER);
-        DrawVirtualObject("sphere");
-
+        // "sol" que fica orbitando usando a curva de bezier
         glm::vec3 sun_position = sunPosition();
         model = Matrix_Scale( 0.1f, 0.1f, 0.1f) * Matrix_Translate(sun_position.x, sun_position.y, sun_position.z);
         glUniformMatrix4fv(g_model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
@@ -1113,6 +1089,56 @@ glm::vec3 bezierCubic(glm::vec3 p0, glm::vec3 p1, glm::vec3 p2, glm::vec3 p3, fl
     return result;
 }
 
+// Desenhamos o objeto de preview da construção
+void drawConstructionPreview(glm::mat4 model, glm::mat4 view)
+{    
+    float distance_to_camera;
+    glm::vec3 objectScale;
+    int objectTexture;
+    std::string objectName;
+    switch(currentBuildSelection){
+        case 0:
+            objectScale = glm::vec3(0.2f, 0.2f, 0.2f);
+            objectTexture = ROCKS;
+            objectName = "cube";
+            distance_to_camera = 2.5f;
+            break;
+        case 1:
+            objectScale = glm::vec3(0.2f, 0.2f, 0.2f);
+            objectTexture = CONCRETE;
+            objectName = "wall";
+            distance_to_camera = 3.0f;
+            break;
+        case 2:
+            objectScale = glm::vec3(0.1f, 0.1f, 0.1f);
+            objectTexture = CONCRETE;
+            objectName = "ceiling";
+            distance_to_camera = 5.0f;
+            break;
+        case 3:
+            objectScale = glm::vec3(0.2f, 0.2f, 0.2f);
+            objectTexture = WOOD;
+            objectName = "table";
+            distance_to_camera = 2.0f;  
+            break;      
+        case 4:
+            objectScale = glm::vec3(0.04f, 0.04f, 0.04f);
+            objectTexture = RUBBER;
+            objectName = "sphere";
+            distance_to_camera = 10.0f;  
+            break;      
+        default: return;
+    }
+    glm::vec3 objectPos = g_CameraPosition + glm::normalize(g_CameraFront) * distance_to_camera;        
+    glm::mat3 rotation_only =  glm::mat3(view);
+    glm::mat3 inverse_rotation = glm::transpose(rotation_only);
+
+    model = Matrix_Scale(objectScale.x,objectScale.y,objectScale.z) * Matrix_Translate(objectPos.x,objectPos.y,objectPos.z) * glm::mat4(inverse_rotation) ;       
+    glUniformMatrix4fv(g_model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
+    glUniform1i(g_object_id_uniform, objectTexture);
+    DrawVirtualObject(objectName.c_str());
+}
+
 // Função callback chamada sempre que o usuário movimentar o cursor do mouse em
 // cima da janela OpenGL.
 void CursorPosCallback(GLFWwindow* window, double xpos, double ypos)
@@ -1181,6 +1207,18 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
     }
     if (key == GLFW_KEY_C && action == GLFW_PRESS){
         freeCamera = !freeCamera;       
+    }
+    if (key == GLFW_KEY_E && action == GLFW_PRESS){
+        currentBuildSelection += 1;
+        if(currentBuildSelection > 4){
+            currentBuildSelection = 0;
+        }
+    }
+    if (key == GLFW_KEY_Q && action == GLFW_PRESS){
+        currentBuildSelection -= 1;
+        if(currentBuildSelection < 0){
+            currentBuildSelection = 4;
+        }
     }
 
     // Se o usuário apertar a tecla espaço, resetamos os ângulos de Euler para zero.
