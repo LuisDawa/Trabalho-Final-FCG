@@ -22,6 +22,7 @@ uniform mat4 projection;
 #define SKY  0
 #define ROCKS  1
 #define WOOD  2
+#define CONCRETE  3
 uniform int object_id;
 
 // Parâmetros da axis-aligned bounding box (AABB) do modelo
@@ -32,6 +33,7 @@ uniform vec4 bbox_max;
 uniform sampler2D FloorTexture;
 uniform sampler2D SkyboxTexture;
 uniform sampler2D WoodTexture;
+uniform sampler2D ConcreteTexture;
 
 // O valor de saída ("out") de um Fragment Shader é a cor final do fragmento.
 out vec4 color;
@@ -47,7 +49,7 @@ void main()
 
     vec4 p = position_world;    
     vec4 n = normalize(normal);
-    vec4 l = normalize(vec4(1.0,1.0,0.0,0.0));
+    vec4 l = normalize(camera_position - p);
     vec4 v = normalize(camera_position - p);
 
     float U = 0.0;
@@ -73,6 +75,13 @@ void main()
         V = texcoords.y;           
 
         Kd = texture(WoodTexture, vec2(U,V)).rgb;    
+    }
+    if ( object_id == CONCRETE )
+    {
+        U = texcoords.x;
+        V = texcoords.y;           
+
+        Kd = texture(ConcreteTexture, vec2(U,V)).rgb;    
     }
     else if( object_id == SKY )
     {

@@ -17,6 +17,7 @@ uniform int object_id;
 #define SKY  0
 #define ROCKS  1
 #define WOOD  2
+#define CONCRETE  3
 
 // Saída para o fragment shader
 out vec4 vertex_color;
@@ -34,13 +35,17 @@ void main()
     vec3 Kd, Ka, Ks;
     float q;
 
-    // Exemplo de material baseado no seu object_id
     if (object_id == ROCKS) { // ROCKS
         Kd = vec3(0.8, 0.8, 0.8);
         Ka = 0.2 * Kd;
         Ks = vec3(0.3);
         q = 32.0;
     } else if (object_id == WOOD) { // WOOD
+        Kd = vec3(0.6, 0.3, 0.1);
+        Ka = 0.2 * Kd;
+        Ks = vec3(0.2);
+        q = 16.0;
+    } else if (object_id == CONCRETE) { // WOOD
         Kd = vec3(0.6, 0.3, 0.1);
         Ka = 0.2 * Kd;
         Ks = vec3(0.2);

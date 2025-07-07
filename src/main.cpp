@@ -219,7 +219,7 @@ glm::vec3 g_CameraUp       = glm::vec3(0.0f, 1.0f,  0.0f);
 
 float g_Yaw   = -90.0f;
 float g_Pitch = 0.0f;
-float g_CameraSpeed = 0.0005f; // velocidade de movimento
+float g_CameraSpeed = 0.005f; // velocidade de movimento
 
 int main(int argc, char* argv[])
 {
@@ -287,6 +287,7 @@ int main(int argc, char* argv[])
     LoadTextureImage("../../data/sky.jpg");         
     LoadTextureImage("../../data/floor.jpg");        
     LoadTextureImage("../../data/wood.jpg");  
+    LoadTextureImage("../../data/concrete.jpg"); 
     
     ObjModel skyboxmodel("../../data/skybox.obj");
     ComputeNormals(&skyboxmodel);
@@ -303,6 +304,15 @@ int main(int argc, char* argv[])
     ObjModel tablemodel("../../data/table.obj");
     ComputeNormals(&tablemodel);
     BuildTrianglesAndAddToVirtualScene(&tablemodel);
+
+    ObjModel wallmodel("../../data/wall.obj");
+    ComputeNormals(&wallmodel);
+    BuildTrianglesAndAddToVirtualScene(&wallmodel);
+
+    ObjModel ceilingmodel("../../data/ceiling.obj");
+    ComputeNormals(&ceilingmodel);
+    BuildTrianglesAndAddToVirtualScene(&ceilingmodel);
+
 
     if ( argc > 1 )
     {
@@ -381,6 +391,7 @@ int main(int argc, char* argv[])
         #define SKY 0
         #define ROCKS 1        
         #define WOOD 2
+        #define CONCRETE 3
 
         // Enviamos as matrizes "view" e "projection" para a placa de vídeo
         // (GPU). Veja o arquivo "shader_vertex.glsl", onde estas são
@@ -421,6 +432,16 @@ int main(int argc, char* argv[])
         glUniformMatrix4fv(g_model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
         glUniform1i(g_object_id_uniform, WOOD);
         DrawVirtualObject("table");
+
+        model = Matrix_Scale( 0.2f, 0.2f, 0.2f) * Matrix_Translate(1.0f, 0.0f, 1.0f);
+        glUniformMatrix4fv(g_model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
+        glUniform1i(g_object_id_uniform, CONCRETE);
+        DrawVirtualObject("wall");
+
+        model = Matrix_Scale( 0.2f, 0.2f, 0.2f) * Matrix_Translate(0.0f, 1.0f, 0.0f);
+        glUniformMatrix4fv(g_model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
+        glUniform1i(g_object_id_uniform, CONCRETE);
+        DrawVirtualObject("ceiling");
         
 
         // Imprimimos na tela informação sobre o número de quadros renderizados
@@ -578,6 +599,7 @@ void LoadShadersFromFiles()
     glUniform1i(glGetUniformLocation(g_GpuProgramID, "SkyboxTexture"), 0);
     glUniform1i(glGetUniformLocation(g_GpuProgramID, "FloorTexture"), 1);
     glUniform1i(glGetUniformLocation(g_GpuProgramID, "WoodTexture"), 2);
+    glUniform1i(glGetUniformLocation(g_GpuProgramID, "ConcreteTexture"), 3);
     glUseProgram(0);
 }
 
