@@ -226,30 +226,31 @@ float g_CameraSpeed = 0.005f; // velocidade de movimento
 float sun_speed = 0.001f;
 float sun_position = 0.0f;
 
-float r = 5.0f;
+float r = 10.0f;
 float c = 0.5522847498f * r; // Constante de aproximação de círculo
+float h = 8.0f;
 
 std::vector<glm::vec3> controlPoints = {
     // Quadrante 1 (superior direito)
-    glm::vec3(0.0f, 1.0f, r),
-    glm::vec3(c, 1.0f, r),
-    glm::vec3(r, 1.0f, c),
-    glm::vec3(r, 1.0f, 0.0f),
+    glm::vec3(0.0f, h, r),
+    glm::vec3(c, h, r),
+    glm::vec3(r, h, c),
+    glm::vec3(r, h, 0.0f),
 
     // Quadrante 2 (inferior direito)
-    glm::vec3(r, 1.0f, -c),
-    glm::vec3(c, 1.0f, -r),
-    glm::vec3(0.0f, 1.0f, -r),
+    glm::vec3(r, h, -c),
+    glm::vec3(c, h, -r),
+    glm::vec3(0.0f, h, -r),
 
     // Quadrante 3 (inferior esquerdo)
-    glm::vec3(-c, 1.0f, -r),
-    glm::vec3(-r, 1.0f, -c),
-    glm::vec3(-r, 1.0f, 0.0f),
+    glm::vec3(-c, h, -r),
+    glm::vec3(-r, h, -c),
+    glm::vec3(-r, h, 0.0f),
 
     // Quadrante 4 (superior esquerdo)
-    glm::vec3(-r, 1.0f, c),
-    glm::vec3(-c, 1.0f, r),
-    glm::vec3(0.0f, 1.0f, r) // Fecha o ciclo (mesmo do início)
+    glm::vec3(-r, h, c),
+    glm::vec3(-c, h, r),
+    glm::vec3(0.0f, h, r) // Fecha o ciclo (mesmo do início)
 };
 
 int main(int argc, char* argv[])
