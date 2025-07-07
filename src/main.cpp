@@ -226,21 +226,30 @@ float g_CameraSpeed = 0.005f; // velocidade de movimento
 float sun_speed = 0.001f;
 float sun_position = 0.0f;
 
+float r = 5.0f;
+float c = 0.5522847498f * r; // Constante de aproximação de círculo
+
 std::vector<glm::vec3> controlPoints = {
-    // Primeiro segmento (P0 a P3)
-    glm::vec3(0.0f, 1.0f, 5.0f),    // P0: Começo (frente)
-    glm::vec3(3.5f, 1.0f, 3.5f),     // P1: Controle (diagonal direita-frente)
-    glm::vec3(5.0f, 1.0f, 0.0f),     // P2: Controle (direita)
-    glm::vec3(3.5f, 1.0f, -3.5f),    // P3: Fim (diagonal direita-trás)
+    // Quadrante 1 (superior direito)
+    glm::vec3(0.0f, 1.0f, r),
+    glm::vec3(c, 1.0f, r),
+    glm::vec3(r, 1.0f, c),
+    glm::vec3(r, 1.0f, 0.0f),
 
-    // Segundo segmento (P3 a P6)
-    glm::vec3(0.0f, 1.0f, -5.0f),    // P4: Controle (trás)
-    glm::vec3(-3.5f, 1.0f, -3.5f),   // P5: Controle (diagonal esquerda-trás)
-    glm::vec3(-5.0f, 1.0f, 0.0f),    // P6: Controle (esquerda)
-    glm::vec3(-3.5f, 1.0f, 3.5f),    // P7: Controle (diagonal esquerda-frente)
+    // Quadrante 2 (inferior direito)
+    glm::vec3(r, 1.0f, -c),
+    glm::vec3(c, 1.0f, -r),
+    glm::vec3(0.0f, 1.0f, -r),
 
-    // Fecha o loop (P7 de volta a P0)
-    glm::vec3(0.0f, 1.0f, 5.0f)      // P8 = P0
+    // Quadrante 3 (inferior esquerdo)
+    glm::vec3(-c, 1.0f, -r),
+    glm::vec3(-r, 1.0f, -c),
+    glm::vec3(-r, 1.0f, 0.0f),
+
+    // Quadrante 4 (superior esquerdo)
+    glm::vec3(-r, 1.0f, c),
+    glm::vec3(-c, 1.0f, r),
+    glm::vec3(0.0f, 1.0f, r) // Fecha o ciclo (mesmo do início)
 };
 
 int main(int argc, char* argv[])
@@ -311,6 +320,7 @@ int main(int argc, char* argv[])
     LoadTextureImage("../../data/wood.jpg");  
     LoadTextureImage("../../data/concrete.jpg"); 
     LoadTextureImage("../../data/rubber.jpg"); 
+    LoadTextureImage("../../data/fire.jpg"); 
     
     ObjModel skyboxmodel("../../data/skybox.obj");
     ComputeNormals(&skyboxmodel);
@@ -364,6 +374,7 @@ int main(int argc, char* argv[])
     #define WOOD 2
     #define CONCRETE 3
     #define RUBBER 4
+    #define FIRE 5
     
     // Ficamos em um loop infinito, renderizando, até que o usuário feche a janela
     while (!glfwWindowShouldClose(window))
@@ -479,7 +490,7 @@ int main(int argc, char* argv[])
         glm::vec3 sun_position = sunPosition();
         model = Matrix_Scale( 0.1f, 0.1f, 0.1f) * Matrix_Translate(sun_position.x, sun_position.y, sun_position.z);
         glUniformMatrix4fv(g_model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
-        glUniform1i(g_object_id_uniform, ROCKS);
+        glUniform1i(g_object_id_uniform, FIRE);
         DrawVirtualObject("sphere");
         
 
@@ -640,6 +651,7 @@ void LoadShadersFromFiles()
     glUniform1i(glGetUniformLocation(g_GpuProgramID, "WoodTexture"), 2);
     glUniform1i(glGetUniformLocation(g_GpuProgramID, "ConcreteTexture"), 3);
     glUniform1i(glGetUniformLocation(g_GpuProgramID, "RubberTexture"), 4);
+    glUniform1i(glGetUniformLocation(g_GpuProgramID, "FireTexture"), 5);
     glUseProgram(0);
 }
 
@@ -1067,15 +1079,19 @@ glm::vec3 sunPosition() {
         sun_position = 0.0f;
     }
 
-    // Calcula o segmento atual (0 ou 1, para os dois segmentos)
-    int segment = static_cast<int>(sun_position * 2); // Dois segmentos
-    float segmentT = fmod(sun_position * 2, 1.0f);   // t local ao segmento
+    int totalSegments = (controlPoints.size() - 1) / 3;
+    float scaledT = sun_position * totalSegments;
+    int segment = static_cast<int>(scaledT);
+    float segmentT = scaledT - segment;
 
-    // Obtém os pontos do segmento atual
-    glm::vec3 p0 = controlPoints[segment * 4];
-    glm::vec3 p1 = controlPoints[segment * 4 + 1];
-    glm::vec3 p2 = controlPoints[segment * 4 + 2];
-    glm::vec3 p3 = controlPoints[segment * 4 + 3];
+    // Segurança
+    if (segment >= totalSegments)
+        segment = totalSegments - 1;
+
+    glm::vec3 p0 = controlPoints[segment * 3];
+    glm::vec3 p1 = controlPoints[segment * 3 + 1];
+    glm::vec3 p2 = controlPoints[segment * 3 + 2];
+    glm::vec3 p3 = controlPoints[segment * 3 + 3];
 
     return bezierCubic(p0, p1, p2, p3, segmentT);
 }

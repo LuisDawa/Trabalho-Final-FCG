@@ -24,6 +24,7 @@ uniform mat4 projection;
 #define WOOD  2
 #define CONCRETE  3
 #define RUBBER  4
+#define FIRE  5
 uniform int object_id;
 
 // Parâmetros da axis-aligned bounding box (AABB) do modelo
@@ -36,6 +37,7 @@ uniform sampler2D SkyboxTexture;
 uniform sampler2D WoodTexture;
 uniform sampler2D ConcreteTexture;
 uniform sampler2D RubberTexture;
+uniform sampler2D FireTexture;
 
 // O valor de saída ("out") de um Fragment Shader é a cor final do fragmento.
 out vec4 color;
@@ -87,10 +89,25 @@ void main()
     }
     if ( object_id == RUBBER )
     {
-        U = texcoords.x;
-        V = texcoords.y;           
+        vec4 bbox_center = (bbox_min + bbox_max) / 2.0;
+
+        vec3 model_position = position_model.xyz - bbox_center.xyz;
+        U = 0.5 + (atan(model_position.z, model_position.x) / (2.0 * M_PI));
+        V = 0.5 - (asin(model_position.y / length(model_position)) / M_PI);
+        V = 1 - V;        
 
         Kd = texture(RubberTexture, vec2(U,V)).rgb;    
+    }
+    if ( object_id == FIRE )
+    {
+        vec4 bbox_center = (bbox_min + bbox_max) / 2.0;
+
+        vec3 model_position = position_model.xyz - bbox_center.xyz;
+        U = 0.5 + (atan(model_position.z, model_position.x) / (2.0 * M_PI));
+        V = 0.5 - (asin(model_position.y / length(model_position)) / M_PI);
+        V = 1 - V;     
+
+        Kd = texture(FireTexture, vec2(U,V)).rgb;    
     }
     else if( object_id == SKY )
     {

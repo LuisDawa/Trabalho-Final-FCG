@@ -18,6 +18,8 @@ uniform int object_id;
 #define ROCKS  1
 #define WOOD  2
 #define CONCRETE  3
+#define RUBBER  4
+#define FIRE  5
 
 // Saída para o fragment shader
 out vec4 vertex_color;
