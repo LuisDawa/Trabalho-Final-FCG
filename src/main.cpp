@@ -13,6 +13,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <algorithm>
+#include <optional>
 
 // Headers das bibliotecas OpenGL
 #include <glad/glad.h>   // Criação de contexto OpenGL 3.3
@@ -31,6 +32,7 @@
 // Headers locais, definidos na pasta "include/"
 #include "utils.h"
 #include "matrices.h"
+#include "collisions.h"
 
 // Estrutura que representa um modelo geométrico carregado a partir de um
 // arquivo ".obj". Veja https://en.wikipedia.org/wiki/Wavefront_.obj_file .
@@ -139,21 +141,6 @@ glm::vec3 bezierCubic(glm::vec3 p0, glm::vec3 p1, glm::vec3 p2, glm::vec3 p3, fl
 glm::vec3 sunPosition();
 void drawConstructionPreview(glm::mat4 model, glm::mat4 view);
 
-// Definimos uma estrutura que armazenará dados necessários para renderizar
-// cada objeto da cena virtual.
-struct SceneObject
-{
-    std::string  name;        // Nome do objeto
-    size_t       first_index; // Índice do primeiro vértice dentro do vetor indices[] definido em BuildTrianglesAndAddToVirtualScene()
-    size_t       num_indices; // Número de índices do objeto dentro do vetor indices[] definido em BuildTrianglesAndAddToVirtualScene()
-    GLenum       rendering_mode; // Modo de rasterização (GL_TRIANGLES, GL_TRIANGLE_STRIP, etc.)
-    GLuint       vertex_array_object_id; // ID do VAO onde estão armazenados os atributos do modelo
-    glm::vec3    bbox_min; // Axis-Aligned Bounding Box do objeto
-    glm::vec3    bbox_max;
-};
-
-bool preview_construction = false;
-
 // Abaixo definimos variáveis globais utilizadas em várias funções do código.
 
 // A cena virtual é uma lista de objetos nomeados, guardados em um dicionário
@@ -161,6 +148,12 @@ bool preview_construction = false;
 // objetos dentro da variável g_VirtualScene, e veja na função main() como
 // estes são acessados.
 std::map<std::string, SceneObject> g_VirtualScene;
+
+// Vetor para guardar todos os objetos permanentes na cena
+std::vector<PlacedObject> g_PlacedObjects;
+
+// Um "container" que pode ou não ter um objeto de preview dentro dele
+std::optional<PlacedObject> g_PreviewObject;
 
 // Pilha que guardará as matrizes de modelagem.
 std::stack<glm::mat4>  g_MatrixStack;
@@ -223,8 +216,9 @@ glm::vec3 g_CameraUp       = glm::vec3(0.0f, 1.0f,  0.0f);
 
 float g_Yaw   = -90.0f;
 float g_Pitch = 0.0f;
-float g_CameraSpeed = 0.005f; // velocidade de movimento
-float sun_speed = 0.001f;
+float g_CameraSpeed = 2.5f; // velocidade de movimento
+float sun_cycle_duration = 60.0f; // duração do ciclo do sol em segundos
+float sun_speed = 2.0f / sun_cycle_duration; 
 float sun_position = 0.0f;
 
 float r = 10.0f;
@@ -263,6 +257,82 @@ int currentBuildSelection = 0;  // varia de zero a 4, pois são 5 construções
 #define CONCRETE 3
 #define RUBBER 4
 #define FIRE 5
+
+GLint g_alpha_uniform;
+
+// Variável para controlar o tempo entre os frames (para a física)
+float g_DeltaTime = 0.0f;
+float g_LastFrame = 0.0f;
+
+void UpdatePhysics()
+{
+    // Define a "gravidade" - a velocidade de queda em unidades por segundo
+    const float gravity = -2.0f; // Ajuste este valor para uma queda mais rápida ou lenta
+    float fall_distance = gravity * g_DeltaTime * 0.8f; // o 0.8f fez os objetos ficarem mais próximos entre si
+
+    // Define a AABB para o chão
+    WorldAABB floor_aabb;
+    const float infinity = std::numeric_limits<float>::max();
+    const float neg_infinity = std::numeric_limits<float>::lowest();
+
+    // O chão é um plano fino em y = -1.2, mas infinito em x e z.
+    floor_aabb.min = glm::vec3(neg_infinity, -1.3f, neg_infinity);
+    floor_aabb.max = glm::vec3(   infinity, -1.2f,    infinity);
+
+    // Itera por todos os objetos colocados na cena (de trás para frente para evitar problemas ao remover)
+    for (auto& falling_object : g_PlacedObjects)
+    {
+        // Pula este objeto se ele já parou de cair
+        if (!falling_object.isFalling) {
+            continue;
+        }
+
+        // MODIFICADO: Passando g_VirtualScene como argumento
+        WorldAABB current_aabb = GetWorldAABB(falling_object, g_VirtualScene);
+
+        // Cria uma AABB "futura" para prever a colisão no próximo passo
+        WorldAABB future_aabb = current_aabb;
+        future_aabb.min.y += fall_distance;
+        future_aabb.max.y += fall_distance;
+
+        bool has_collided = false;
+
+        // 1. Checa colisão com o chão
+        if (CheckAABBCollision(future_aabb, floor_aabb)) {
+            has_collided = true;
+        }
+
+        // 2. Checa colisão com todos os outros objetos
+        if (!has_collided) {
+            for (const auto& other_object : g_PlacedObjects)
+            {
+                // Não checa colisão com ele mesmo!
+                if (&falling_object == &other_object) {
+                    continue;
+                }
+                
+                // Trata o "other_object" como uma esfera para esta verificação
+                WorldSphere other_sphere = GetWorldBoundingSphere(other_object, g_VirtualScene);
+
+                // Verifica a colisão entre a AABB futura do objeto caindo e a esfera do outro objeto
+                if (CheckAABBSphereCollision(future_aabb, other_sphere)) {
+                    has_collided = true;
+                    break; // Sai do loop interno, já encontrou uma colisão
+                }
+            }
+        }
+
+        // Atualiza o estado do objeto
+        if (has_collided) {
+            // Se colidiu, para de cair
+            falling_object.isFalling = false;
+        } else {
+            // Se não colidiu, aplica o movimento de queda com Matrix_Translate
+            glm::mat4 translation_matrix = Matrix_Translate(0.0f, fall_distance, 0.0f);
+            falling_object.modelMatrix = falling_object.modelMatrix * translation_matrix;
+        }
+    }
+}
 
 int main(int argc, char* argv[])
 {
@@ -376,13 +446,21 @@ int main(int argc, char* argv[])
     glEnable(GL_DEPTH_TEST);
     
     // Habilitamos o Backface Culling. Veja slides 8-13 do documento Aula_02_Fundamentos_Matematicos.pdf, slides 23-34 do documento Aula_13_Clipping_and_Culling.pdf e slides 112-123 do documento Aula_14_Laboratorio_3_Revisao.pdf.
-    glEnable(GL_CULL_FACE);
+    glEnable(GL_CULL_FACE); // Comentar essa linha não é uma boa prática mas resolve o problema de cubo sem faces (para .obj errado)
     glCullFace(GL_BACK);
     glFrontFace(GL_CCW);
     
     // Ficamos em um loop infinito, renderizando, até que o usuário feche a janela
     while (!glfwWindowShouldClose(window))
     {
+        // Cálculo do DeltaTime
+        float currentFrame = (float)glfwGetTime();
+        g_DeltaTime = currentFrame - g_LastFrame;
+        g_LastFrame = currentFrame;
+
+        // Atualização da Física
+        UpdatePhysics();
+
         // Aqui executamos as operações de renderização
 
         // Definimos a cor do "fundo" do framebuffer como branco.  Tal cor é
@@ -435,6 +513,21 @@ int main(int argc, char* argv[])
         }
 
         glm::mat4 model = Matrix_Identity(); // Transformação identidade de modelagem
+        // ATUALIZA A POSIÇÃO DO PREVIEW A CADA FRAME (se ele existir)
+        if (g_PreviewObject.has_value())
+        {
+            float distance_to_camera = 2.0f;
+            glm::vec3 previewPos = g_CameraPosition + glm::normalize(g_CameraFront) * distance_to_camera;
+
+            // Precisamos da matriz de visão para alinhar a rotação do preview com o mundo
+            glm::mat4 view = glm::lookAt(g_CameraPosition, g_CameraPosition + g_CameraFront, g_CameraUp);
+            glm::mat3 inverse_rotation = glm::transpose(glm::mat3(view));
+
+            // Atualiza a matriz do objeto de preview
+            g_PreviewObject->modelMatrix = Matrix_Translate(previewPos.x, previewPos.y, previewPos.z)
+                                        * glm::mat4(inverse_rotation)
+                                        * Matrix_Scale(0.2f, 0.2f, 0.2f);
+        }
 
         // Enviamos as matrizes "view" e "projection" para a placa de vídeo
         // (GPU). Veja o arquivo "shader_vertex.glsl", onde estas são
@@ -449,16 +542,14 @@ int main(int argc, char* argv[])
         glUniformMatrix4fv(g_model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
         glUniform1i(g_object_id_uniform, SKY);
         DrawVirtualObject("skybox_globe");                
-        
-        if(preview_construction){
-            drawConstructionPreview(model, view);
-        }
 
         // View que não acompanha o movimento da câmera
         glUniformMatrix4fv(g_view_uniform, 1 , GL_FALSE , glm::value_ptr(view));
 
         // Desenhamos o plano do chão
-        model = Matrix_Translate(0.0f,-1.2f, 0.0f);
+        // EUREKA! O "chão visual" tava sendo desenhado em y = -0.2 (porque plane.obj já começava com y=1),
+        // enquanto o "chão real" fazia os objetos pararem em y = -1.2.
+        model = Matrix_Translate(0.0f, -2.2f, 0.0f) * Matrix_Scale(100.0f, 1.0f, 100.0f);
         glUniformMatrix4fv(g_model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
         glUniform1i(g_object_id_uniform, ROCKS);
         DrawVirtualObject("floor");
@@ -469,7 +560,36 @@ int main(int argc, char* argv[])
         glUniformMatrix4fv(g_model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
         glUniform1i(g_object_id_uniform, FIRE);
         DrawVirtualObject("sphere");
+
+        // Desenhamos todos os objetos que foram colocados no mundo
+        for (const auto& placedObject : g_PlacedObjects)
+        {
+            glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(placedObject.modelMatrix));
+            // CORREÇÃO: Define a ID de textura para cada objeto individualmente
+            glUniform1i(g_object_id_uniform, placedObject.textureId);
+            DrawVirtualObject(placedObject.objectName.c_str());
+        }
         
+        // Desenhamos o objeto de preview, se ele existir
+        if (g_PreviewObject.has_value())
+        {
+            // Habilita o "blending" para transparência
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+            // Define a transparência para o preview
+            glUniform1f(g_alpha_uniform, 0.5f); // 50% transparente
+
+            glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(g_PreviewObject->modelMatrix));
+            // CORREÇÃO: Usa a ID de textura do próprio objeto de preview
+            glUniform1i(g_object_id_uniform, g_PreviewObject->textureId);
+
+            DrawVirtualObject(g_PreviewObject->objectName.c_str());
+
+            // Desabilita o blending para não afetar o resto da cena (como o texto do FPS)
+            glDisable(GL_BLEND);
+            glUniform1f(g_alpha_uniform, 1.0f); // Reseta a transparência para o padrão
+        }
 
         // Imprimimos na tela informação sobre o número de quadros renderizados
         // por segundo (frames per second).
@@ -620,6 +740,7 @@ void LoadShadersFromFiles()
     g_object_id_uniform  = glGetUniformLocation(g_GpuProgramID, "object_id"); // Variável "object_id" em shader_fragment.glsl
     g_bbox_min_uniform   = glGetUniformLocation(g_GpuProgramID, "bbox_min");
     g_bbox_max_uniform   = glGetUniformLocation(g_GpuProgramID, "bbox_max");
+    g_alpha_uniform      = glGetUniformLocation(g_GpuProgramID, "u_alpha");
 
     // Variáveis em "shader_fragment.glsl" para acesso das imagens de textura
     glUseProgram(g_GpuProgramID);
@@ -1037,19 +1158,69 @@ double g_LastCursorPosX, g_LastCursorPosY;
 // Função callback chamada sempre que o usuário aperta algum dos botões do mouse
 void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
 {
+    // Se o botão direito for pressionado, criamos o preview
     if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_PRESS)
-    {
-        preview_construction = true; 
+{
+    std::string objectName;
+    int textureId;
+
+    // Define o objeto e a textura com base na seleção atual
+    switch(currentBuildSelection) {
+        case 0:
+            objectName = "cube";
+            textureId = WOOD; // ou a textura que preferir para o cubo
+            break;
+        case 1:
+            objectName = "wall";
+            textureId = CONCRETE;
+            break;
+        case 2:
+            objectName = "ceiling";
+            textureId = CONCRETE;
+            break;
+        case 3:
+            objectName = "table";
+            textureId = WOOD;
+            break;
+        case 4:
+            objectName = "sphere";
+            textureId = RUBBER;
+            break;
+        default:
+            return; // Não faz nada se a seleção for inválida
     }
+
+    // A matriz de modelo será atualizada a cada frame no loop principal,
+    // então podemos começar com uma matriz identidade.
+    glm::mat4 previewModel = Matrix_Identity();
+
+    // Criamos o objeto de preview com o nome e textura corretos
+    g_PreviewObject.emplace(PlacedObject{objectName, previewModel, false, textureId});
+}
+
+    // Se o botão direito for solto, destruímos o preview
     if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_RELEASE)
     {
-        preview_construction = false;        
+        g_PreviewObject.reset(); // Esvazia o optional
+    }
+
+    // SE O BOTÃO ESQUERDO FOR PRESSIONADO E O PREVIEW EXISTIR: Colocamos o objeto no mundo
+    if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS && g_PreviewObject.has_value())
+    {
+        // Pega o objeto do preview
+        PlacedObject newObject = g_PreviewObject.value();
+
+        // Define que o novo objeto deve começar caindo
+        newObject.isFalling = true;
+
+        // Adiciona a cópia do objeto ao nosso vetor de objetos permanentes
+        g_PlacedObjects.push_back(newObject);
     }
 }
 
 // Atualiza e retorna a posição atual do objeto
 glm::vec3 sunPosition() {
-    sun_position += sun_speed;
+    sun_position += sun_speed * g_DeltaTime;
 
     // Reinicia o loop quando t > 1.0
     if (sun_position >= 1.0f) {
@@ -1256,16 +1427,16 @@ void KeyPress(GLFWwindow* window)
     glm::vec3 forward = glm::normalize(glm::vec3(g_CameraFront.x, 0.0f, g_CameraFront.z));
     
     if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
-        g_CameraPosition += g_CameraSpeed * forward;
+        g_CameraPosition += g_CameraSpeed * forward * g_DeltaTime;
 
     if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
-        g_CameraPosition -= g_CameraSpeed * forward;
+        g_CameraPosition -= g_CameraSpeed * forward * g_DeltaTime;
 
     if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
-        g_CameraPosition -= g_CameraSpeed * right;
+        g_CameraPosition -= g_CameraSpeed * right * g_DeltaTime;
 
     if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
-        g_CameraPosition += g_CameraSpeed * right;    
+        g_CameraPosition += g_CameraSpeed * right * g_DeltaTime;    
 
 }
 
@@ -1274,10 +1445,10 @@ glm::mat4 getCameraView()
 {
     glm::mat4 view;
     if(freeCamera){
-        view = glm::lookAt(
-            g_CameraPosition,
-            g_CameraPosition + g_CameraFront,
-            g_CameraUp
+        view = Matrix_Camera_View(
+            glm::vec4(g_CameraPosition, 1.0f),  // Posição é um ponto (w=1)
+            glm::vec4(g_CameraFront, 0.0f),     // 'Front' é um vetor (w=0)
+            glm::vec4(g_CameraUp, 0.0f)         // 'Up' é um vetor (w=0)
         );
     }
     else{

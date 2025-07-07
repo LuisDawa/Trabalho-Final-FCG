@@ -37,17 +37,17 @@ void main()
     vec3 Kd, Ka, Ks;
     float q;
 
-    if (object_id == ROCKS) { // ROCKS
+    if (object_id == ROCKS) {
         Kd = vec3(0.8, 0.8, 0.8);
         Ka = 0.2 * Kd;
         Ks = vec3(0.3);
         q = 32.0;
-    } else if (object_id == WOOD) { // WOOD
+    } else if (object_id == WOOD) {
         Kd = vec3(0.6, 0.3, 0.1);
         Ka = 0.2 * Kd;
         Ks = vec3(0.2);
         q = 16.0;
-    } else if (object_id == CONCRETE) { // WOOD
+    } else if (object_id == CONCRETE) {
         Kd = vec3(0.6, 0.3, 0.1);
         Ka = 0.2 * Kd;
         Ks = vec3(0.2);
