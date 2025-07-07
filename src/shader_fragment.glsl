@@ -53,21 +53,26 @@ void main()
     float U = 0.0;
     float V = 0.0;
     vec3 Kd0 = vec3(0.0);
-    
+
+    vec4 h = normalize(l + v); // Vetor que define o sentido da reflexão especular ideal.
+    vec3 Kd; // Refletância difusa
+    vec3 Ks; // Refletância especular
+    vec3 Ka; // Refletância ambiente
+    float q; // Expoente especular para o modelo de iluminação de Phong
 
     if ( object_id == ROCKS )
     {
         U = texcoords.x;
         V = texcoords.y;           
 
-        Kd0 = texture(FloorTexture, vec2(U,V)).rgb;    
+        Kd = texture(FloorTexture, vec2(U,V)).rgb;    
     }
     if ( object_id == WOOD )
     {
         U = texcoords.x;
         V = texcoords.y;           
 
-        Kd0 = texture(WoodTexture, vec2(U,V)).rgb;    
+        Kd = texture(WoodTexture, vec2(U,V)).rgb;    
     }
     else if( object_id == SKY )
     {
@@ -82,11 +87,23 @@ void main()
     }
         
     if( object_id != SKY ){  // Objetos que devem ter sobreamento
-        float lambert = max(0,dot(n,l));
-        color.rgb = Kd0 * (lambert + 1);
+        vec3 I = vec3(1.0, 1.0, 1.0);
+
+        vec3 Ia = vec3(0.2, 0.2, 0.2);
+
+        float n_dot_l = max(dot(n, l), 0.0);
+        vec3 lambert_diffuse_term = I * Kd * n_dot_l;
+
+        vec3 ambient_term = Ia * Ka;
+
+        float n_dot_h = max(dot(n, h), 0.0);
+        vec3 blinn_specular_term = I * Ks * pow(n_dot_h, q);
+        color.rgb = lambert_diffuse_term + ambient_term + blinn_specular_term;
+
+        color.a = 1;
+        color.rgb = pow(color.rgb, vec3(1.0,1.0,1.0)/2.2);
     }
 
-    color.a = 1;
-    color.rgb = pow(color.rgb, vec3(1.0,1.0,1.0)/2.2);
+
 } 
 

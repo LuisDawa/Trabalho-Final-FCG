@@ -415,7 +415,7 @@ int main(int argc, char* argv[])
         glUniform1i(g_object_id_uniform, ROCKS);
         DrawVirtualObject("floor");
 
-        model = Matrix_Translate(0.0f, 0.0f, 0.0f);
+        model = Matrix_Scale( 0.2f, 0.2f, 0.2f) * Matrix_Translate(0.0f, -1.0f, 0.0f);
         glUniformMatrix4fv(g_model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
         glUniform1i(g_object_id_uniform, WOOD);
         DrawVirtualObject("table");
