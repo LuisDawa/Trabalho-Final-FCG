@@ -223,7 +223,7 @@ float sun_position = 0.0f;
 
 float r = 10.0f;
 float c = 0.5522847498f * r; // Constante de aproximação de círculo
-float h = 8.0f;
+float h = 20.0f;
 
 std::vector<glm::vec3> controlPoints = {
     // Quadrante 1 (superior direito)
@@ -249,6 +249,7 @@ std::vector<glm::vec3> controlPoints = {
 };
 
 int currentBuildSelection = 0;  // varia de zero a 4, pois são 5 construções
+float buildSelectionSize = 0.5f;
 
 // Define as constantes de cada textura. Devem ser as mesmas do arquivo shader_fragment.glsl
 #define SKY 0
@@ -526,7 +527,7 @@ int main(int argc, char* argv[])
             // Atualiza a matriz do objeto de preview
             g_PreviewObject->modelMatrix = Matrix_Translate(previewPos.x, previewPos.y, previewPos.z)
                                         * glm::mat4(inverse_rotation)
-                                        * Matrix_Scale(0.2f, 0.2f, 0.2f);
+                                        * Matrix_Scale(buildSelectionSize, buildSelectionSize, buildSelectionSize);
         }
 
         // Enviamos as matrizes "view" e "projection" para a placa de vídeo
@@ -549,14 +550,14 @@ int main(int argc, char* argv[])
         // Desenhamos o plano do chão
         // EUREKA! O "chão visual" tava sendo desenhado em y = -0.2 (porque plane.obj já começava com y=1),
         // enquanto o "chão real" fazia os objetos pararem em y = -1.2.
-        model = Matrix_Translate(0.0f, -2.2f, 0.0f) * Matrix_Scale(100.0f, 1.0f, 100.0f);
+        model = Matrix_Translate(0.0f, -2.2f, 0.0f) * Matrix_Scale(10.0f, 1.0f, 10.0f);
         glUniformMatrix4fv(g_model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
         glUniform1i(g_object_id_uniform, ROCKS);
         DrawVirtualObject("floor");
 
         // "sol" que fica orbitando usando a curva de bezier
         glm::vec3 sun_position = sunPosition();
-        model = Matrix_Scale( 0.1f, 0.1f, 0.1f) * Matrix_Translate(sun_position.x, sun_position.y, sun_position.z);
+        model = Matrix_Scale( 0.2f, 0.2f, 0.2f) * Matrix_Translate(sun_position.x, sun_position.y, sun_position.z);
         glUniformMatrix4fv(g_model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
         glUniform1i(g_object_id_uniform, FIRE);
         DrawVirtualObject("sphere");
@@ -1169,22 +1170,27 @@ void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
         case 0:
             objectName = "cube";
             textureId = WOOD; // ou a textura que preferir para o cubo
+            buildSelectionSize = 0.5;
             break;
         case 1:
             objectName = "wall";
             textureId = CONCRETE;
+            buildSelectionSize = 1.0;
             break;
         case 2:
             objectName = "ceiling";
             textureId = CONCRETE;
+            buildSelectionSize = 0.6;
             break;
         case 3:
             objectName = "table";
             textureId = WOOD;
+            buildSelectionSize = 1.2;
             break;
         case 4:
             objectName = "sphere";
             textureId = RUBBER;
+            buildSelectionSize = 0.2;
             break;
         default:
             return; // Não faz nada se a seleção for inválida
@@ -1258,56 +1264,6 @@ glm::vec3 bezierCubic(glm::vec3 p0, glm::vec3 p1, glm::vec3 p2, glm::vec3 p3, fl
     result.z = uuu * p0.z + 3 * uu * t * p1.z + 3 * u * tt * p2.z + ttt * p3.z;
 
     return result;
-}
-
-// Desenhamos o objeto de preview da construção
-void drawConstructionPreview(glm::mat4 model, glm::mat4 view)
-{    
-    float distance_to_camera;
-    glm::vec3 objectScale;
-    int objectTexture;
-    std::string objectName;
-    switch(currentBuildSelection){
-        case 0:
-            objectScale = glm::vec3(0.2f, 0.2f, 0.2f);
-            objectTexture = ROCKS;
-            objectName = "cube";
-            distance_to_camera = 2.5f;
-            break;
-        case 1:
-            objectScale = glm::vec3(0.2f, 0.2f, 0.2f);
-            objectTexture = CONCRETE;
-            objectName = "wall";
-            distance_to_camera = 3.0f;
-            break;
-        case 2:
-            objectScale = glm::vec3(0.1f, 0.1f, 0.1f);
-            objectTexture = CONCRETE;
-            objectName = "ceiling";
-            distance_to_camera = 5.0f;
-            break;
-        case 3:
-            objectScale = glm::vec3(0.2f, 0.2f, 0.2f);
-            objectTexture = WOOD;
-            objectName = "table";
-            distance_to_camera = 2.0f;  
-            break;      
-        case 4:
-            objectScale = glm::vec3(0.04f, 0.04f, 0.04f);
-            objectTexture = RUBBER;
-            objectName = "sphere";
-            distance_to_camera = 10.0f;  
-            break;      
-        default: return;
-    }
-    glm::vec3 objectPos = g_CameraPosition + glm::normalize(g_CameraFront) * distance_to_camera;        
-    glm::mat3 rotation_only =  glm::mat3(view);
-    glm::mat3 inverse_rotation = glm::transpose(rotation_only);
-
-    model = Matrix_Scale(objectScale.x,objectScale.y,objectScale.z) * Matrix_Translate(objectPos.x,objectPos.y,objectPos.z) * glm::mat4(inverse_rotation) ;       
-    glUniformMatrix4fv(g_model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
-    glUniform1i(g_object_id_uniform, objectTexture);
-    DrawVirtualObject(objectName.c_str());
 }
 
 // Função callback chamada sempre que o usuário movimentar o cursor do mouse em
@@ -1478,32 +1434,30 @@ void ErrorCallback(int error, const char* description)
 // second).
 void TextRendering_ShowFramesPerSecond(GLFWwindow* window)
 {
-    if ( !g_ShowInfoText )
-        return;
-
-    // Variáveis estáticas (static) mantém seus valores entre chamadas
-    // subsequentes da função!
-    static float old_seconds = (float)glfwGetTime();
-    static int   ellapsed_frames = 0;
-    static char  buffer[20] = "?? fps";
+    static char  buffer[20] = "Teste";
     static int   numchars = 7;
 
-    ellapsed_frames += 1;
-
-    // Recuperamos o número de segundos que passou desde a execução do programa
-    float seconds = (float)glfwGetTime();
-
-    // Número de segundos desde o último cálculo do fps
-    float ellapsed_seconds = seconds - old_seconds;
-
-    if ( ellapsed_seconds > 1.0f )
-    {
-        numchars = snprintf(buffer, 20, "%.2f fps", ellapsed_frames / ellapsed_seconds);
-    
-        old_seconds = seconds;
-        ellapsed_frames = 0;
+    switch(currentBuildSelection) {
+        case 0:
+            numchars = snprintf(buffer, 20, "Cubo");
+            break;
+        case 1:
+            numchars = snprintf(buffer, 20, "Parede");
+            break;
+        case 2:
+            numchars = snprintf(buffer, 20, "Piso");
+            break;
+        case 3:
+            numchars = snprintf(buffer, 20, "Mesa");
+            break;
+        case 4:
+            numchars = snprintf(buffer, 20, "Bola");
+            break;
+        default:
+            return; // Não faz nada se a seleção for inválida
     }
-
+    
+    
     float lineheight = TextRendering_LineHeight(window);
     float charwidth = TextRendering_CharWidth(window);
 
