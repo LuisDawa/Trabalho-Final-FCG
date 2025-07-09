@@ -11,6 +11,8 @@ uniform mat4 model;
 uniform mat4 view;
 uniform mat4 projection;
 
+uniform int object_id;
+
 // Atributos de vértice que serão gerados como saída ("out") pelo Vertex Shader.
 // ** Estes serão interpolados pelo rasterizador! ** gerando, assim, valores
 // para cada fragmento, os quais serão recebidos como entrada pelo Fragment
@@ -61,7 +63,16 @@ void main()
     normal = inverse(transpose(model)) * normal_coefficients;
     normal.w = 0.0;
 
-    // Coordenadas de textura obtidas do arquivo OBJ (se existirem!)
-    texcoords = texture_coefficients;
+    if (object_id == 1)
+    {
+        // Se for, multiplicamos as coordenadas de textura para que elas se repitam.
+        // O valor 50.0 pode ser ajustado para mais ou menos repetições.
+        texcoords = texture_coefficients * 50.0;
+    }
+    else
+    {
+        // Para qualquer outro objeto, usamos as coordenadas de textura originais.
+        texcoords = texture_coefficients;
+    }
 }
 

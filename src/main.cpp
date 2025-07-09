@@ -102,7 +102,7 @@ void PopMatrix(glm::mat4& M);
 void BuildTrianglesAndAddToVirtualScene(ObjModel*); // Constrói representação de um ObjModel como malha de triângulos para renderização
 void ComputeNormals(ObjModel* model); // Computa normais de um ObjModel, caso não existam.
 void LoadShadersFromFiles(); // Carrega os shaders de vértice e fragmento, criando um programa de GPU
-void LoadTextureImage(const char* filename); // Função que carrega imagens de textura
+void LoadTextureImage(const char* filename, GLenum wrap_s, GLenum wrap_t); // Função que carrega imagens de textura
 void DrawVirtualObject(const char* object_name); // Desenha um objeto armazenado em g_VirtualScene
 GLuint LoadShader_Vertex(const char* filename);   // Carrega um vertex shader
 GLuint LoadShader_Fragment(const char* filename); // Carrega um fragment shader
@@ -398,12 +398,12 @@ int main(int argc, char* argv[])
     glfwSetFramebufferSizeCallback(window, FramebufferSizeCallback);
 
     LoadShadersFromFiles();    
-    LoadTextureImage("../../data/sky.jpg");         
-    LoadTextureImage("../../data/floor.jpg");        
-    LoadTextureImage("../../data/wood.jpg");  
-    LoadTextureImage("../../data/concrete.jpg"); 
-    LoadTextureImage("../../data/rubber.jpg"); 
-    LoadTextureImage("../../data/fire.jpg"); 
+    LoadTextureImage("../../data/sky.jpg", GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);         
+    LoadTextureImage("../../data/floor.jpg", GL_REPEAT, GL_REPEAT);        
+    LoadTextureImage("../../data/wood.jpg", GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE); 
+    LoadTextureImage("../../data/concrete.jpg", GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
+    LoadTextureImage("../../data/rubber.jpg", GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
+    LoadTextureImage("../../data/fire.jpg", GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
     
     ObjModel skyboxmodel("../../data/skybox.obj");
     ComputeNormals(&skyboxmodel);
@@ -624,7 +624,7 @@ int main(int argc, char* argv[])
 }
 
 // Função que carrega uma imagem para ser utilizada como textura
-void LoadTextureImage(const char* filename)
+void LoadTextureImage(const char* filename, GLenum wrap_s, GLenum wrap_t)
 {
     printf("Carregando imagem \"%s\"... ", filename);
 
@@ -650,8 +650,8 @@ void LoadTextureImage(const char* filename)
     glGenSamplers(1, &sampler_id);
 
     // Veja slides 95-96 do documento Aula_20_Mapeamento_de_Texturas.pdf
-    glSamplerParameteri(sampler_id, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glSamplerParameteri(sampler_id, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glSamplerParameteri(sampler_id, GL_TEXTURE_WRAP_S, wrap_s);
+    glSamplerParameteri(sampler_id, GL_TEXTURE_WRAP_T, wrap_t);
 
     // Parâmetros de amostragem da textura.
     glSamplerParameteri(sampler_id, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
@@ -1156,11 +1156,7 @@ void FramebufferSizeCallback(GLFWwindow* window, int width, int height)
 // de tempo. Utilizadas no callback CursorPosCallback() abaixo.
 double g_LastCursorPosX, g_LastCursorPosY;
 
-// Função callback chamada sempre que o usuário aperta algum dos botões do mouse
-void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
-{
-    // Se o botão direito for pressionado, criamos o preview
-    if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_PRESS)
+PlacedObject CreateObjectFromSelection()
 {
     std::string objectName;
     int textureId;
@@ -1169,7 +1165,7 @@ void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
     switch(currentBuildSelection) {
         case 0:
             objectName = "cube";
-            textureId = WOOD; // ou a textura que preferir para o cubo
+            textureId = WOOD;
             buildSelectionSize = 0.5;
             break;
         case 1:
@@ -1193,24 +1189,38 @@ void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
             buildSelectionSize = 0.2;
             break;
         default:
-            return; // Não faz nada se a seleção for inválida
+            // Caso padrão para segurança, retorna um cubo
+            objectName = "cube";
+            textureId = WOOD;
+            break;
     }
 
     // A matriz de modelo será atualizada a cada frame no loop principal,
     // então podemos começar com uma matriz identidade.
     glm::mat4 previewModel = Matrix_Identity();
 
-    // Criamos o objeto de preview com o nome e textura corretos
-    g_PreviewObject.emplace(PlacedObject{objectName, previewModel, false, textureId});
+    // Retorna um novo PlacedObject com as configurações corretas
+    return PlacedObject{objectName, previewModel, false, textureId};
 }
 
-    // Se o botão direito for solto, destruímos o preview
+// Função callback chamada sempre que o usuário aperta algum dos botões do mouse
+// Função callback chamada sempre que o usuário aperta algum dos botões do mouse
+void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
+{
+    // Se o botão direito for pressionado, criamos o preview
+    if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_PRESS)
+    {
+        // Agora a criação do preview é feita por nossa função auxiliar
+        g_PreviewObject.emplace(CreateObjectFromSelection());
+    }
+
+    // Se o botão direito for solto, destruímos o preview (esta parte continua igual)
     if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_RELEASE)
     {
         g_PreviewObject.reset(); // Esvazia o optional
     }
 
-    // SE O BOTÃO ESQUERDO FOR PRESSIONADO E O PREVIEW EXISTIR: Colocamos o objeto no mundo
+    // SE O BOTÃO ESQUERDO FOR PRESSIONADO E O PREVIEW EXISTIR: Colocamos o objeto no mundo (esta parte continua igual)
     if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS && g_PreviewObject.has_value())
     {
         // Pega o objeto do preview
@@ -1264,6 +1274,56 @@ glm::vec3 bezierCubic(glm::vec3 p0, glm::vec3 p1, glm::vec3 p2, glm::vec3 p3, fl
     result.z = uuu * p0.z + 3 * uu * t * p1.z + 3 * u * tt * p2.z + ttt * p3.z;
 
     return result;
+}
+
+// Desenhamos o objeto de preview da construção
+void drawConstructionPreview(glm::mat4 model, glm::mat4 view)
+{    
+    float distance_to_camera;
+    glm::vec3 objectScale;
+    int objectTexture;
+    std::string objectName;
+    switch(currentBuildSelection){
+        case 0:
+            objectScale = glm::vec3(0.2f, 0.2f, 0.2f);
+            objectTexture = ROCKS;
+            objectName = "cube";
+            distance_to_camera = 2.5f;
+            break;
+        case 1:
+            objectScale = glm::vec3(0.2f, 0.2f, 0.2f);
+            objectTexture = CONCRETE;
+            objectName = "wall";
+            distance_to_camera = 3.0f;
+            break;
+        case 2:
+            objectScale = glm::vec3(0.1f, 0.1f, 0.1f);
+            objectTexture = CONCRETE;
+            objectName = "ceiling";
+            distance_to_camera = 5.0f;
+            break;
+        case 3:
+            objectScale = glm::vec3(0.2f, 0.2f, 0.2f);
+            objectTexture = WOOD;
+            objectName = "table";
+            distance_to_camera = 2.0f;  
+            break;      
+        case 4:
+            objectScale = glm::vec3(0.04f, 0.04f, 0.04f);
+            objectTexture = RUBBER;
+            objectName = "sphere";
+            distance_to_camera = 10.0f;  
+            break;      
+        default: return;
+    }
+    glm::vec3 objectPos = g_CameraPosition + glm::normalize(g_CameraFront) * distance_to_camera;        
+    glm::mat3 rotation_only =  glm::mat3(view);
+    glm::mat3 inverse_rotation = glm::transpose(rotation_only);
+
+    model = Matrix_Scale(objectScale.x,objectScale.y,objectScale.z) * Matrix_Translate(objectPos.x,objectPos.y,objectPos.z) * glm::mat4(inverse_rotation) ;       
+    glUniformMatrix4fv(g_model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
+    glUniform1i(g_object_id_uniform, objectTexture);
+    DrawVirtualObject(objectName.c_str());
 }
 
 // Função callback chamada sempre que o usuário movimentar o cursor do mouse em
@@ -1335,16 +1395,28 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
     if (key == GLFW_KEY_C && action == GLFW_PRESS){
         freeCamera = !freeCamera;       
     }
+
+    // LÓGICA ATUALIZADA PARA 'E'
     if (key == GLFW_KEY_E && action == GLFW_PRESS){
         currentBuildSelection += 1;
         if(currentBuildSelection > 4){
             currentBuildSelection = 0;
         }
+        // Se o preview estiver ativo, atualiza-o com a nova seleção
+        if (g_PreviewObject.has_value()) {
+            g_PreviewObject.emplace(CreateObjectFromSelection());
+        }
     }
+
+    // LÓGICA ATUALIZADA PARA 'Q'
     if (key == GLFW_KEY_Q && action == GLFW_PRESS){
         currentBuildSelection -= 1;
         if(currentBuildSelection < 0){
             currentBuildSelection = 4;
+        }
+        // Se o preview estiver ativo, atualiza-o com a nova seleção
+        if (g_PreviewObject.has_value()) {
+            g_PreviewObject.emplace(CreateObjectFromSelection());
         }
     }
 
