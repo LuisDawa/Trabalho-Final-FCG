@@ -10,12 +10,12 @@ Aqui estão algumas capturas de tela demonstrando o funcionamento da aplicação
 
 ## Contribuições dos Membros
 
-  * **Jean Argoud:** Foi responsável pelo desenvolvimento de [].
+  * **Jean Argoud:** Foi responsável pela implementação do desenho de todos os objetos e texturas dos mesmos, os tipos de câmera, as transformações dos objetos, os modelos de iluminação, os modelos de interpolação (assim como a troca entre eles) e o algoritmo de curva de Bézier.
   * **Luís Antônio Mikhail Dawa:** Responsável pela implementação da física (queda e colisões) e do preview e do posicionamento de objetos.
 
 ## Uso de Ferramentas de IA
 
-Para o desenvolvimento deste trabalho, fizemos uso do ChatGPT e do Gemini. As LLMs foram muito úteis para ajuda em questões pontuais durante o desenvolvimento, como debuggar o código e apontar sugestões de melhorias, pois não são muito eficientes fazendo tarefas muito grandes e complexas de uma vez só.
+Para o desenvolvimento deste trabalho, fizemos uso do ChatGPT e do Gemini. As LLMs foram muito úteis para ajuda em questões pontuais durante o desenvolvimento, como debuggar o código e apontar sugestões de melhorias, especialmente em erros que acontecem no shader, pois nem sempre são eficientes fazendo tarefas muito grandes e complexas de uma vez só. Uma parte do código que foi 100% copiada de IA foi o arquivo shader_vertex_gouraud.glsl e shader_fragment_gouraud.glsl, onde pedimos para ela gerar o código baseada na nossa implementação já existente do modelo de phong.
 
 ## Descrição do Desenvolvimento e Conceitos Utilizados
 
@@ -24,7 +24,7 @@ O desenvolvimento da aplicação foi baseado nos conceitos estudados na discipli
   * **Modelagem e Renderização:**
 
       * Os modelos 3D (cubo, parede, mesa, etc.) foram carregados a partir de arquivos no formato `.obj` utilizando a biblioteca `tiny_obj_loader`.
-      * A renderização é feita através de um pipeline gráfico moderno com Vertex e Fragment Shaders (GLSL). O projeto suporta tanto o modelo de iluminação **Gouraud** quanto **Phong**, sendo possível alternar entre eles em tempo de execução.
+      * A renderização é feita através de um pipeline gráfico moderno com Vertex e Fragment Shaders (GLSL). O projeto suporta tanto o modelo de iluminação **Blinn-Phong** e **Lambert**, além de interpolações usando o modelo de **Gouraud** e **Phong**, sendo possível alternar entre eles em tempo de execução.
       * Utilizamos o **Z-buffer** para o correto tratamento de profundidade e o **Backface Culling** para otimizar a renderização, descartando polígonos que não estão virados para a câmera.
 
   * **Câmera e Projeção:**
@@ -35,12 +35,11 @@ O desenvolvimento da aplicação foi baseado nos conceitos estudados na discipli
   * **Texturas e Iluminação:**
 
       * As texturas são carregadas de arquivos de imagem (`.jpg`) com a biblioteca `stb_image` e mapeadas nos objetos para dar realismo. Cada objeto pode ter uma textura diferente (madeira, concreto, borracha, etc.).
-      * O cenário possui um "sol" dinâmico que se move ao longo de uma **curva de Bézier cúbica**, simulando um ciclo de dia e noite e alterando a iluminação da cena.
+      * O cenário possui um "sol" dinâmico que se move ao longo de uma **curva de Bézier cúbica** dividida em quatro seções, onde o primeiro e último ponto são o mesmo para formar um círculo.
 
   * **Interação e Física:**
 
-      * O usuário pode selecionar diferentes objetos para construir. Um *preview* do objeto a ser construído é renderizado de forma semitransparente (opacidade 50%) na frente da câmera.
-      * Ao posicionar um objeto, ele é adicionado à cena e passa a ser simulado por um sistema de física simples. Os objetos são afetados pela gravidade e caem até colidir com o chão ou com outros objetos.
+      * O usuário pode selecionar diferentes objetos para construir. Ao posicionar um objeto, ele é adicionado à cena e passa a ser simulado por um sistema de física simples. Os objetos são afetados pela gravidade e caem até colidir com o chão ou com outros objetos.
       * A detecção de colisão é implementada de três formas: entre a **Axis-Aligned Bounding Box (AABB)** de um objeto em queda e a AABB do chão, e entre a AABB do objeto em queda e a **Esfera Envolvente (Bounding Sphere)** dos outros objetos já posicionados.
 
 ## Manual de Utilização
